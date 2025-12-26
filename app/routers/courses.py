@@ -5,7 +5,9 @@ Handles all course-related endpoints with configurable AI providers.
 from fastapi import APIRouter, HTTPException, status, Query
 from typing import Optional
 from app.models.course import GenerateCourseRequest, GenerateCourseResponse, Chapter
+from app.models.validation import TopicValidationResult
 from app.services.ai_service_factory import AIServiceFactory
+from app.services.topic_validator import get_topic_validator
 from app.config import UseCase
 from app.db import crud
 
@@ -54,14 +56,40 @@ async def generate_course(
         {"topic": "Project Management"}
     """
     try:
-        # Validate topic
+        # Validate topic is not empty
         if not request.topic or not request.topic.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Topic cannot be empty"
             )
 
-        # Check cache first
+        # Step 1: Validate topic using TopicValidator
+        validator = get_topic_validator()
+        validation_result = await validator.validate(request.topic)
+
+        if validation_result.status == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "topic_rejected",
+                    "reason": validation_result.reason,
+                    "message": validation_result.message,
+                    "suggestions": validation_result.suggestions
+                }
+            )
+
+        if validation_result.status == "needs_clarification":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "topic_needs_clarification",
+                    "reason": validation_result.reason,
+                    "message": validation_result.message,
+                    "suggestions": validation_result.suggestions
+                }
+            )
+
+        # Step 2: Check cache first
         cached_course = await crud.get_course_by_topic(request.topic, request.difficulty)
         if cached_course:
             # Return cached course
@@ -118,6 +146,44 @@ async def generate_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate course: {str(e)}"
         )
+
+
+@router.post(
+    "/validate-topic",
+    response_model=TopicValidationResult,
+    status_code=status.HTTP_200_OK,
+    summary="Validate a topic before course generation",
+    description="Checks if a topic is suitable for course generation. Returns validation status, suggestions, and complexity assessment."
+)
+async def validate_topic(
+    request: GenerateCourseRequest
+):
+    """
+    Validate a topic before generating a course.
+
+    This endpoint allows the frontend to check if a topic is valid
+    before submitting for course generation. Useful for real-time
+    validation and providing user feedback.
+
+    Args:
+        request: Request body containing the topic
+
+    Returns:
+        TopicValidationResult with status, suggestions, and complexity
+
+    Examples:
+        # Valid topic
+        POST /api/v1/courses/validate-topic
+        {"topic": "Python Web Development", "difficulty": "beginner"}
+        -> {"status": "accepted", "complexity": {...}}
+
+        # Too broad
+        POST /api/v1/courses/validate-topic
+        {"topic": "Physics", "difficulty": "beginner"}
+        -> {"status": "rejected", "reason": "too_broad", "suggestions": [...]}
+    """
+    validator = get_topic_validator()
+    return await validator.validate(request.topic)
 
 
 @router.get(

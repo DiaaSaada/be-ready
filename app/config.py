@@ -20,6 +20,7 @@ class AIModel(str, Enum):
     CLAUDE_OPUS_4 = "claude-opus-4-20250514"
     CLAUDE_SONNET_4 = "claude-sonnet-4-20250514"
     CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001"
+    CLAUDE_HAIKU_3_5 = "claude-haiku-3-5-20241022"
     
     # OpenAI models
     GPT_4_TURBO = "gpt-4-turbo-preview"
@@ -37,6 +38,7 @@ class UseCase(str, Enum):
     STUDENT_FEEDBACK = "student_feedback"
     ANSWER_CHECKING = "answer_checking"
     RAG_QUERY = "rag_query"
+    TOPIC_VALIDATION = "topic_validation"
 
 
 class Settings(BaseSettings):
@@ -70,6 +72,7 @@ class Settings(BaseSettings):
     model_student_feedback: str = "claude-sonnet-4-20250514"
     model_answer_checking: str = "claude-haiku-4-5-20251001"
     model_rag_query: str = "claude-haiku-4-5-20251001"
+    model_topic_validation: str = "claude-haiku-3-5-20241022"
     
     # AI Settings
     max_tokens_chapter: int = 4000
@@ -77,6 +80,7 @@ class Settings(BaseSettings):
     max_tokens_feedback: int = 1500
     max_tokens_answer: int = 500
     max_tokens_rag: int = 1000
+    max_tokens_validation: int = 500
     
     temperature: float = 0.7
     
@@ -106,6 +110,7 @@ class Settings(BaseSettings):
             UseCase.STUDENT_FEEDBACK: self.model_student_feedback,
             UseCase.ANSWER_CHECKING: self.model_answer_checking,
             UseCase.RAG_QUERY: self.model_rag_query,
+            UseCase.TOPIC_VALIDATION: self.model_topic_validation,
         }
         return use_case_map.get(use_case, self.model_chapter_generation)
     
@@ -144,6 +149,7 @@ class Settings(BaseSettings):
             UseCase.STUDENT_FEEDBACK: self.max_tokens_feedback,
             UseCase.ANSWER_CHECKING: self.max_tokens_answer,
             UseCase.RAG_QUERY: self.max_tokens_rag,
+            UseCase.TOPIC_VALIDATION: self.max_tokens_validation,
         }
         return use_case_map.get(use_case, 2000)
 
