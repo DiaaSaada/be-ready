@@ -3,17 +3,22 @@ Pydantic models for API requests and responses.
 These define the structure of data we receive and send.
 """
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 class GenerateCourseRequest(BaseModel):
     """Request model for generating a course from a topic."""
     topic: str = Field(..., min_length=1, max_length=200, description="The topic/subject for the course")
-    
+    difficulty: Literal["beginner", "intermediate", "advanced"] = Field(
+        ...,
+        description="Difficulty level for all chapters: beginner, intermediate, or advanced"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
-                "topic": "Project Management"
+                "topic": "Project Management",
+                "difficulty": "beginner"
             }
         }
 

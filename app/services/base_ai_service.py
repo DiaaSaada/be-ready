@@ -15,14 +15,15 @@ class BaseAIService(ABC):
     """
     
     @abstractmethod
-    async def generate_chapters(self, topic: str, content: str = "") -> List[Chapter]:
+    async def generate_chapters(self, topic: str, difficulty: str = "intermediate", content: str = "") -> List[Chapter]:
         """
         Generate chapters for a given topic.
-        
+
         Args:
             topic: The subject/topic for the course
+            difficulty: Difficulty level for all chapters (beginner/intermediate/advanced)
             content: Optional document content to analyze
-            
+
         Returns:
             List of Chapter objects
         """

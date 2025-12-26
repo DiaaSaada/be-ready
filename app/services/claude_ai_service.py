@@ -27,14 +27,15 @@ class ClaudeAIService(BaseAIService):
         self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         self.default_model = model or settings.model_chapter_generation
     
-    async def generate_chapters(self, topic: str, content: str = "") -> List[Chapter]:
+    async def generate_chapters(self, topic: str, difficulty: str = "intermediate", content: str = "") -> List[Chapter]:
         """
         Generate chapters using Claude AI.
-        
+
         Args:
             topic: The subject/topic for the course
+            difficulty: Difficulty level for all chapters (beginner/intermediate/advanced)
             content: Optional document content to analyze
-            
+
         Returns:
             List of Chapter objects
         """
@@ -43,6 +44,7 @@ class ClaudeAIService(BaseAIService):
             prompt = f"""You are an expert educational content creator.
 
 Given this document about {topic}, break it down into logical chapters.
+All chapters must be at the "{difficulty}" difficulty level.
 
 Document content:
 {content}
@@ -52,7 +54,7 @@ For each chapter, provide:
 2. Title (concise, clear)
 3. Summary (2-3 sentences)
 4. Key concepts (list of 3-5 main ideas)
-5. Estimated difficulty (beginner/intermediate/advanced)
+5. Difficulty: always set to "{difficulty}"
 
 Return ONLY valid JSON in this format:
 {{
@@ -62,7 +64,7 @@ Return ONLY valid JSON in this format:
       "title": "...",
       "summary": "...",
       "key_concepts": [...],
-      "difficulty": "..."
+      "difficulty": "{difficulty}"
     }}
   ]
 }}"""
@@ -70,15 +72,16 @@ Return ONLY valid JSON in this format:
             prompt = f"""You are an expert educational content creator.
 
 Create a structured course about {topic} with logical chapters.
+All chapters must be at the "{difficulty}" difficulty level.
 
 For each chapter, provide:
 1. Chapter number
 2. Title (concise, clear)
 3. Summary (2-3 sentences)
 4. Key concepts (list of 3-5 main ideas)
-5. Estimated difficulty (beginner/intermediate/advanced)
+5. Difficulty: always set to "{difficulty}"
 
-Create 4-6 chapters that progressively build knowledge.
+Create 4-6 chapters that progressively build knowledge, all at the {difficulty} level.
 
 Return ONLY valid JSON in this format:
 {{
@@ -88,7 +91,7 @@ Return ONLY valid JSON in this format:
       "title": "...",
       "summary": "...",
       "key_concepts": [...],
-      "difficulty": "..."
+      "difficulty": "{difficulty}"
     }}
   ]
 }}"""

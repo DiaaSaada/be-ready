@@ -101,29 +101,33 @@ class MockAIService(BaseAIService):
             ]
         }
     
-    async def generate_chapters(self, topic: str, content: str = "") -> List[Chapter]:
+    async def generate_chapters(self, topic: str, difficulty: str = "intermediate", content: str = "") -> List[Chapter]:
         """
         Generate mock chapters for a given topic.
-        
+
         Args:
             topic: The subject/topic for the course
+            difficulty: Difficulty level for all chapters (beginner/intermediate/advanced)
             content: Optional document content (ignored in mock)
-            
+
         Returns:
             List of Chapter objects
         """
         # Normalize the topic
         normalized_topic = topic.lower().strip()
-        
+
         # Get mock data for this topic, or use default
         chapter_data = self.mock_chapters_data.get(
-            normalized_topic, 
+            normalized_topic,
             self.mock_chapters_data["default"]
         )
-        
-        # Convert dictionaries to Chapter objects
-        chapters = [Chapter(**chapter) for chapter in chapter_data]
-        
+
+        # Convert dictionaries to Chapter objects with user-specified difficulty
+        chapters = []
+        for chapter in chapter_data:
+            chapter_with_difficulty = {**chapter, "difficulty": difficulty}
+            chapters.append(Chapter(**chapter_with_difficulty))
+
         return chapters
     
     async def generate_questions(

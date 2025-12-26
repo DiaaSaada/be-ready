@@ -4,9 +4,10 @@ Handles all course-related endpoints with configurable AI providers.
 """
 from fastapi import APIRouter, HTTPException, status, Query
 from typing import Optional
-from app.models.course import GenerateCourseRequest, GenerateCourseResponse
+from app.models.course import GenerateCourseRequest, GenerateCourseResponse, Chapter
 from app.services.ai_service_factory import AIServiceFactory
 from app.config import UseCase
+from app.db import crud
 
 # Create router
 router = APIRouter()
@@ -27,28 +28,28 @@ async def generate_course(
     )
 ):
     """
-    Generate a course with chapters based on the provided topic.
-    
+    Generate a course with chapters based on the provided topic and difficulty.
+
     Args:
-        request: Request body containing the topic
+        request: Request body containing the topic and difficulty level
         provider: Optional AI provider override (claude/openai/mock)
-        
+
     Returns:
         GenerateCourseResponse with generated chapters
-        
+
     Raises:
         HTTPException: If topic is invalid or generation fails
-        
+
     Examples:
-        # Use default provider (from config)
+        # Use default provider with beginner difficulty
         POST /api/v1/courses/generate
-        {"topic": "Project Management"}
-        
-        # Force use of mock provider
+        {"topic": "Project Management", "difficulty": "beginner"}
+
+        # Force use of mock provider with advanced difficulty
         POST /api/v1/courses/generate?provider=mock
-        {"topic": "Project Management"}
-        
-        # Use Claude specifically
+        {"topic": "Project Management", "difficulty": "advanced"}
+
+        # Use Claude with intermediate difficulty (default)
         POST /api/v1/courses/generate?provider=claude
         {"topic": "Project Management"}
     """
@@ -59,27 +60,47 @@ async def generate_course(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Topic cannot be empty"
             )
-        
+
+        # Check cache first
+        cached_course = await crud.get_course_by_topic(request.topic, request.difficulty)
+        if cached_course:
+            # Return cached course
+            chapters = [Chapter(**ch) for ch in cached_course["chapters"]]
+            return GenerateCourseResponse(
+                topic=cached_course["original_topic"],
+                total_chapters=len(chapters),
+                chapters=chapters,
+                message=f"Retrieved {len(chapters)} {request.difficulty}-level chapters for '{request.topic}' from cache"
+            )
+
         # Get the appropriate AI service
         ai_service = AIServiceFactory.get_service(
             use_case=UseCase.CHAPTER_GENERATION,
             provider_override=provider
         )
-        
-        # Generate chapters
-        chapters = await ai_service.generate_chapters(request.topic)
-        
+
+        # Generate chapters with user-specified difficulty
+        chapters = await ai_service.generate_chapters(request.topic, request.difficulty)
+
         # Determine which provider was actually used
         actual_provider = ai_service.get_provider_name()
-        
+
+        # Save to cache (non-blocking, don't fail if DB is down)
+        await crud.save_course(
+            topic=request.topic,
+            difficulty=request.difficulty,
+            chapters=chapters,
+            provider=actual_provider
+        )
+
         # Create response
         response = GenerateCourseResponse(
             topic=request.topic,
             total_chapters=len(chapters),
             chapters=chapters,
-            message=f"Generated {len(chapters)} chapters for '{request.topic}' using {actual_provider}"
+            message=f"Generated {len(chapters)} {request.difficulty}-level chapters for '{request.topic}' using {actual_provider}"
         )
-        
+
         return response
         
     except HTTPException:
