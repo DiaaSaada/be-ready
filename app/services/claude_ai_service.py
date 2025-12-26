@@ -77,6 +77,12 @@ Time per chapter: {time_per_chapter} minutes
 
 {diff_guidance}
 
+IMPORTANT: If this is a recognized certification, professional credential, or standardized exam (e.g., CAPM, PMP, AWS, CISSP, etc.):
+- Structure chapters based on the OFFICIAL exam domains/syllabus
+- Use the actual certification curriculum as your guide
+- Each chapter should align with real exam objectives
+- Include domain names as they appear in the official certification guide
+
 Based on this document, create exactly {num_chapters} chapters:
 
 Document content:
@@ -118,6 +124,12 @@ Content depth: {depth} ({depth_desc})
 Time per chapter: {time_per_chapter} minutes
 
 {diff_guidance}
+
+IMPORTANT: If this is a recognized certification, professional credential, or standardized exam (e.g., CAPM, PMP, AWS, CISSP, etc.):
+- Structure chapters based on the OFFICIAL exam domains/syllabus
+- Use the actual certification curriculum as your guide
+- Each chapter should align with real exam objectives
+- Include domain names as they appear in the official certification guide
 
 Create exactly {num_chapters} chapters that:
 - Progress logically from fundamentals to more complex concepts

@@ -16,11 +16,10 @@ class AIProvider(str, Enum):
 
 class AIModel(str, Enum):
     """Available AI models."""
-    # Claude models
+    # Claude models (format: claude-{major}-{minor}-{variant}-{date})
     CLAUDE_OPUS_4 = "claude-opus-4-20250514"
     CLAUDE_SONNET_4 = "claude-sonnet-4-20250514"
-    CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001"
-    CLAUDE_HAIKU_3_5 = "claude-haiku-3-5-20241022"
+    CLAUDE_HAIKU_35 = "claude-3-5-haiku-20241022"
     
     # OpenAI models
     GPT_4_TURBO = "gpt-4-turbo-preview"
@@ -70,9 +69,9 @@ class Settings(BaseSettings):
     model_chapter_generation: str = "claude-sonnet-4-20250514"
     model_question_generation: str = "claude-sonnet-4-20250514"
     model_student_feedback: str = "claude-sonnet-4-20250514"
-    model_answer_checking: str = "claude-haiku-4-5-20251001"
-    model_rag_query: str = "claude-haiku-4-5-20251001"
-    model_topic_validation: str = "claude-haiku-3-5-20241022"
+    model_answer_checking: str = "claude-3-5-haiku-20241022"
+    model_rag_query: str = "claude-3-5-haiku-20241022"
+    model_topic_validation: str = "claude-3-5-haiku-20241022"
     
     # AI Settings
     max_tokens_chapter: int = 4000

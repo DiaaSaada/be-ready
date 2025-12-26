@@ -227,10 +227,18 @@ class TopicValidator:
 
 Topic: "{topic}"
 
-Evaluate and respond with ONLY valid JSON:
+IMPORTANT: If this topic is a recognized certification, professional credential, or standardized exam (e.g., CAPM, PMP, AWS, CISSP, CPA, etc.):
+- Treat it as VALID - these are well-defined learning paths
+- Use your knowledge of the official syllabus/exam domains
+- Base the complexity and chapter estimates on the actual certification curriculum
+- The estimated_chapters should align with the certification's official domains/modules
+
+Evaluate and respond with ONLY valid JSON (no additional text):
 
 {{
   "is_valid": true/false,
+  "is_certification": true/false,
+  "certification_body": "Name of certifying organization if applicable, null otherwise",
   "reason": null or "too_broad" or "too_narrow" or "unclear" or "inappropriate",
   "message": "Brief explanation of your assessment",
   "suggestions": ["suggestion1", "suggestion2", "suggestion3"],
@@ -244,14 +252,14 @@ Evaluate and respond with ONLY valid JSON:
 }}
 
 Guidelines:
-- A valid topic can be covered in 4-8 chapters (a single focused course)
+- A valid topic can be covered in 4-20 chapters (a single focused course)
+- Certifications are ALWAYS valid - they have official curricula
 - "too_broad" = would need multiple courses (e.g., "Computer Science")
 - "too_narrow" = not enough content for a course (e.g., "How to print Hello World")
 - "unclear" = ambiguous or vague topic
 - "inappropriate" = offensive or not educational
 - Complexity score: 1=trivial, 5=moderate, 10=extremely complex
-- Provide 3-5 alternative suggestions if not valid
-- For valid topics, still provide the complexity assessment"""
+- For certifications, base estimated_chapters on official exam domains"""
 
         try:
             response = await self.client.messages.create(
@@ -299,7 +307,9 @@ Guidelines:
                 reason=data.get("reason"),
                 message=data["message"],
                 suggestions=data.get("suggestions", []),
-                complexity=complexity
+                complexity=complexity,
+                is_certification=data.get("is_certification", False),
+                certification_body=data.get("certification_body")
             )
 
         except Exception as e:

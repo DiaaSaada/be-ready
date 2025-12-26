@@ -49,6 +49,14 @@ class TopicValidationResult(BaseModel):
         default=None,
         description="Complexity assessment (only for accepted topics)"
     )
+    is_certification: bool = Field(
+        default=False,
+        description="Whether the topic is a recognized certification or credential"
+    )
+    certification_body: Optional[str] = Field(
+        default=None,
+        description="Name of the certifying organization (e.g., PMI, AWS, CompTIA)"
+    )
 
     class Config:
         json_schema_extra = {
