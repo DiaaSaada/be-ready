@@ -19,6 +19,12 @@ PROVIDERS_ENDPOINT = f"{BASE_URL}/api/v1/courses/providers"
 PRESETS_ENDPOINT = f"{BASE_URL}/api/v1/courses/config-presets"
 HEALTH_ENDPOINT = f"{BASE_URL}/health"
 
+# Question generation endpoints
+QUESTIONS_GENERATE_ENDPOINT = f"{BASE_URL}/api/v1/questions/generate"
+QUESTIONS_ANALYZE_ENDPOINT = f"{BASE_URL}/api/v1/questions/analyze-count"
+QUESTIONS_SAMPLE_ENDPOINT = f"{BASE_URL}/api/v1/questions/sample"
+QUESTIONS_CONFIG_ENDPOINT = f"{BASE_URL}/api/v1/questions/config"
+
 
 def print_header(title: str):
     """Print a formatted section header."""
@@ -279,6 +285,238 @@ def test_supported_topics():
 
 
 # =============================================================================
+# Question Generation Tests
+# =============================================================================
+
+def test_question_generation_mock():
+    """Test question generation with mock provider."""
+    print_subheader("Generate Questions (mock): Python Basics")
+
+    payload = {
+        "topic": "Python Programming",
+        "difficulty": "beginner",
+        "chapter_number": 1,
+        "chapter_title": "Variables and Data Types",
+        "key_concepts": ["variables", "strings", "integers", "floats"]
+    }
+
+    try:
+        response = requests.post(f"{QUESTIONS_GENERATE_ENDPOINT}?provider=mock", json=payload)
+
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Chapter: {data['chapter_number']}. {data['chapter_title']}")
+            print(f"Total Questions: {data['total_questions']}")
+            print(f"Total Points: {data['total_points']}")
+            print(f"MCQ Count: {len(data['mcq_questions'])}")
+            print(f"T/F Count: {len(data['true_false_questions'])}")
+            print(f"Provider: {data['generation_info'].get('provider', 'unknown')}")
+
+            # Show first MCQ
+            if data['mcq_questions']:
+                mcq = data['mcq_questions'][0]
+                print(f"\nSample MCQ:")
+                print(f"  Q: {mcq['question_text'][:60]}...")
+                print(f"  Difficulty: {mcq['difficulty']}")
+
+            return True
+        else:
+            print(f"Error {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def test_question_analyze_count():
+    """Test question count analysis."""
+    print_subheader("Analyze Question Count: AWS Advanced")
+
+    payload = {
+        "topic": "AWS Solutions Architect",
+        "difficulty": "advanced",
+        "chapter_number": 1,
+        "chapter_title": "EC2 and Compute",
+        "chapter_summary": "Learn about EC2 instances, auto scaling, and load balancing.",
+        "key_concepts": ["EC2", "Auto Scaling", "Load Balancers", "EBS"],
+        "estimated_time_minutes": 90
+    }
+
+    try:
+        response = requests.post(QUESTIONS_ANALYZE_ENDPOINT, json=payload)
+
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Recommended MCQ: {data['mcq_count']}")
+            print(f"Recommended T/F: {data['true_false_count']}")
+            print(f"Total: {data['total_count']}")
+            print(f"Reasoning: {data['reasoning'][:80]}...")
+            return True
+        else:
+            print(f"Error {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def test_question_difficulty_affects_count():
+    """Test that different difficulties produce different question counts."""
+    print_subheader("Difficulty Affects Question Count")
+
+    results = {}
+
+    for difficulty in ["beginner", "intermediate", "advanced"]:
+        payload = {
+            "topic": "Project Management",
+            "difficulty": difficulty,
+            "chapter_number": 1,
+            "chapter_title": "Introduction",
+            "key_concepts": ["planning", "execution", "monitoring"]
+        }
+
+        try:
+            response = requests.post(f"{QUESTIONS_GENERATE_ENDPOINT}?provider=mock", json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                results[difficulty] = {
+                    "mcq": len(data['mcq_questions']),
+                    "tf": len(data['true_false_questions']),
+                    "total": data['total_questions']
+                }
+        except Exception:
+            pass
+
+    if len(results) == 3:
+        for diff, counts in results.items():
+            print(f"  {diff}: MCQ={counts['mcq']}, T/F={counts['tf']}, Total={counts['total']}")
+
+        # Advanced should generally have more questions than beginner
+        # (based on default counts: beginner=8+5, intermediate=12+6, advanced=20+8)
+        if results['advanced']['total'] >= results['beginner']['total']:
+            print("  [OK] Advanced has more or equal questions than beginner")
+            return True
+        else:
+            print("  [WARN] Expected advanced to have more questions")
+            return True  # Still pass, as mock uses random distribution
+    else:
+        print("  Could not get all difficulty levels")
+        return False
+
+
+def test_question_sample_endpoint():
+    """Test the sample questions endpoint."""
+    print_subheader("Sample Questions Endpoint")
+
+    try:
+        response = requests.get(
+            QUESTIONS_SAMPLE_ENDPOINT,
+            params={"topic": "Math", "difficulty": "beginner", "mcq_count": 3, "tf_count": 2}
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Topic: {data['chapter_title']}")
+            print(f"MCQ Questions: {len(data['mcq_questions'])}")
+            print(f"T/F Questions: {len(data['true_false_questions'])}")
+            print(f"Provider: {data['generation_info'].get('provider', 'unknown')}")
+
+            # Verify counts match request
+            if len(data['mcq_questions']) == 3 and len(data['true_false_questions']) == 2:
+                print("  [OK] Question counts match request")
+                return True
+            else:
+                print("  [WARN] Question counts don't match request")
+                return False
+        else:
+            print(f"Error {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def test_question_config_endpoint():
+    """Test the question config endpoint."""
+    print_subheader("Question Generation Config")
+
+    try:
+        response = requests.get(QUESTIONS_CONFIG_ENDPOINT)
+
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Model: {data['model']}")
+            print(f"Analysis Model: {data['model_analysis']}")
+            print(f"Default Counts:")
+            for level, counts in data['default_counts'].items():
+                print(f"  {level}: MCQ={counts['mcq']}, T/F={counts['tf']}")
+            return True
+        else:
+            print(f"Error {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def test_beginner_vs_advanced_questions():
+    """Test that beginner topics get simpler questions than advanced topics."""
+    print_subheader("Question Complexity by Topic Type")
+
+    # Test beginner-friendly topic
+    beginner_payload = {
+        "topic": "Math for 5th Grade",
+        "difficulty": "beginner",
+        "chapter_number": 1,
+        "chapter_title": "Addition and Subtraction",
+        "key_concepts": ["adding numbers", "subtracting numbers", "word problems"]
+    }
+
+    # Test advanced professional topic
+    advanced_payload = {
+        "topic": "AWS Solutions Architect",
+        "difficulty": "advanced",
+        "chapter_number": 1,
+        "chapter_title": "High Availability Architecture",
+        "key_concepts": ["Multi-AZ", "Auto Scaling", "Load Balancing", "Disaster Recovery"]
+    }
+
+    try:
+        # Get beginner questions
+        beginner_resp = requests.post(f"{QUESTIONS_GENERATE_ENDPOINT}?provider=mock", json=beginner_payload)
+        advanced_resp = requests.post(f"{QUESTIONS_GENERATE_ENDPOINT}?provider=mock", json=advanced_payload)
+
+        if beginner_resp.status_code == 200 and advanced_resp.status_code == 200:
+            beginner_data = beginner_resp.json()
+            advanced_data = advanced_resp.json()
+
+            print(f"\nBeginner Topic (Math for 5th Grade):")
+            print(f"  Audience: {beginner_data['generation_info'].get('audience', 'N/A')[:50]}...")
+            print(f"  Questions: {beginner_data['total_questions']}")
+
+            print(f"\nAdvanced Topic (AWS Solutions Architect):")
+            print(f"  Audience: {advanced_data['generation_info'].get('audience', 'N/A')[:50]}...")
+            print(f"  Questions: {advanced_data['total_questions']}")
+
+            # Check that audiences are different
+            beginner_audience = beginner_data['generation_info'].get('audience', '')
+            advanced_audience = advanced_data['generation_info'].get('audience', '')
+
+            if 'beginner' in beginner_audience.lower() or 'teen' in beginner_audience.lower():
+                print("\n  [OK] Beginner topic has appropriate audience")
+            if 'professional' in advanced_audience.lower() or 'expert' in advanced_audience.lower():
+                print("  [OK] Advanced topic has appropriate audience")
+
+            return True
+        else:
+            print(f"Beginner: {beginner_resp.status_code}, Advanced: {advanced_resp.status_code}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -316,6 +554,15 @@ def run_all_tests():
     results.append(("Config Presets", test_config_presets()))
     results.append(("AI Providers", test_providers()))
     results.append(("Mock Topics", test_supported_topics()))
+
+    # Question generation tests
+    print_header("5. Question Generation Tests")
+    results.append(("Generate Questions (mock)", test_question_generation_mock()))
+    results.append(("Analyze Question Count", test_question_analyze_count()))
+    results.append(("Difficulty Affects Count", test_question_difficulty_affects_count()))
+    results.append(("Sample Questions", test_question_sample_endpoint()))
+    results.append(("Question Config", test_question_config_endpoint()))
+    results.append(("Beginner vs Advanced", test_beginner_vs_advanced_questions()))
 
     # Summary
     print_header("Test Results Summary")

@@ -4,6 +4,7 @@ This is the core of the AI Learning Platform backend.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 import os
 
@@ -13,6 +14,62 @@ from app.db.connection import MongoDB
 
 # Create uploads directory if it doesn't exist
 os.makedirs(settings.upload_dir, exist_ok=True)
+
+
+# OpenAPI Tags Metadata
+tags_metadata = [
+    {
+        "name": "health",
+        "description": "Health check and status endpoints.",
+    },
+    {
+        "name": "courses",
+        "description": "**Course Generation** - Create AI-powered courses from topics. "
+                       "Includes topic validation, chapter generation, and course configuration.",
+    },
+    {
+        "name": "questions",
+        "description": "**Question Generation** - Generate MCQ and True/False questions for chapters. "
+                       "Features AI-based question count analysis and difficulty-aware generation.",
+    },
+]
+
+
+# App description for docs
+APP_DESCRIPTION = """
+## AI Learning Platform API
+
+An AI-powered learning platform that generates personalized courses and assessments.
+
+### Features
+
+* **Topic Validation** - Validates topics before course generation
+* **Course Generation** - Creates structured chapters from any topic
+* **Question Generation** - Generates MCQ and True/False questions
+* **Multiple AI Providers** - Supports Claude, OpenAI, and Mock providers
+* **Difficulty Levels** - Beginner, Intermediate, and Advanced content
+
+### Quick Start
+
+1. **Validate a topic**: `POST /api/v1/courses/validate`
+2. **Generate a course**: `POST /api/v1/courses/generate`
+3. **Generate questions**: `POST /api/v1/questions/generate`
+
+### AI Providers
+
+Use the `?provider=` query parameter to select:
+- `mock` - Fast testing without API calls
+- `claude` - Anthropic Claude (default)
+- `openai` - OpenAI GPT
+
+### Difficulty Levels
+
+| Level | Audience | Questions |
+|-------|----------|-----------|
+| `beginner` | Teens, simple language | 8 MCQ, 5 T/F |
+| `intermediate` | College students | 12 MCQ, 6 T/F |
+| `advanced` | Professionals | 20 MCQ, 8 T/F |
+"""
 
 
 @asynccontextmanager
@@ -49,8 +106,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="AI-powered learning platform with adaptive mentoring",
-    lifespan=lifespan
+    description=APP_DESCRIPTION,
+    lifespan=lifespan,
+    openapi_tags=tags_metadata,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    contact={
+        "name": "AI Learning Platform",
+        "url": "https://github.com/your-repo/be-ready",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 # Configure CORS
@@ -63,19 +130,39 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get(
+    "/",
+    tags=["health"],
+    summary="Welcome",
+    description="Root endpoint returning app info and status."
+)
 async def root():
-    """Root endpoint - health check."""
+    """Root endpoint - returns app info and running status."""
     return {
         "message": f"Welcome to {settings.app_name}",
         "version": settings.app_version,
-        "status": "running"
+        "status": "running",
+        "docs": "/docs",
+        "redoc": "/redoc"
     }
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["health"],
+    summary="Health Check",
+    description="Returns health status including database connection state."
+)
 async def health_check():
-    """Health check endpoint."""
+    """
+    Health check endpoint.
+
+    Returns:
+        - status: "healthy" if all systems operational
+        - app_name: Application name
+        - version: Current version
+        - database: MongoDB connection status
+    """
     return {
         "status": "healthy",
         "app_name": settings.app_name,
@@ -85,10 +172,11 @@ async def health_check():
 
 
 # Import routers
-from app.routers import courses
+from app.routers import courses, questions
 
 # Include routers
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
+app.include_router(questions.router, prefix="/api/v1/questions", tags=["questions"])
 
 
 if __name__ == "__main__":

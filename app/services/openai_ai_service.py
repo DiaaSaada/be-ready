@@ -5,10 +5,26 @@ Implements BaseAIService interface.
 """
 from typing import List, Dict, Any
 import json
+import uuid
 from openai import AsyncOpenAI
 from app.models.course import Chapter, CourseConfig
+from app.models.question import (
+    QuestionGenerationConfig,
+    ChapterQuestions,
+    MCQQuestion,
+    TrueFalseQuestion,
+    QuestionDifficulty,
+)
 from app.services.base_ai_service import BaseAIService
 from app.config import settings
+
+
+# Audience descriptions for question generation
+AUDIENCE_DESCRIPTIONS: Dict[str, str] = {
+    "beginner": "teenagers and beginners; use simple language, short questions, avoid jargon",
+    "intermediate": "college students and working professionals; technical terms allowed, medium-length questions",
+    "advanced": "experienced professionals and experts; industry jargon acceptable, complex scenario-based questions allowed",
+}
 
 
 class OpenAIService(BaseAIService):
@@ -185,77 +201,190 @@ Return ONLY valid JSON:
 
         return chapters
     
+    def _map_difficulty(self, difficulty_str: str) -> QuestionDifficulty:
+        """Map string difficulty to enum."""
+        mapping = {
+            "easy": QuestionDifficulty.EASY,
+            "medium": QuestionDifficulty.MEDIUM,
+            "hard": QuestionDifficulty.HARD,
+        }
+        return mapping.get(difficulty_str.lower(), QuestionDifficulty.MEDIUM)
+
     async def generate_questions(
-        self, 
-        chapter: Chapter, 
-        num_mcq: int = 5, 
+        self,
+        chapter: Chapter,
+        num_mcq: int = 5,
         num_true_false: int = 3
     ) -> Dict[str, Any]:
         """
-        Generate quiz questions using OpenAI GPT.
-        
+        Generate quiz questions using OpenAI GPT (legacy method).
+
         Args:
             chapter: The chapter object
             num_mcq: Number of multiple choice questions
             num_true_false: Number of true/false questions
-            
+
         Returns:
             Dictionary with 'mcq' and 'true_false' question arrays
         """
-        prompt = f"""Create assessment questions for this chapter.
+        # Build config and delegate to the new method
+        config = QuestionGenerationConfig(
+            topic=chapter.title,
+            difficulty=chapter.difficulty,
+            audience=AUDIENCE_DESCRIPTIONS.get(chapter.difficulty, AUDIENCE_DESCRIPTIONS["intermediate"]),
+            chapter_number=chapter.number,
+            chapter_title=chapter.title,
+            key_concepts=chapter.key_concepts,
+            recommended_mcq_count=num_mcq,
+            recommended_tf_count=num_true_false
+        )
 
-Chapter: {chapter.title}
-Summary: {chapter.summary}
-Key Concepts: {', '.join(chapter.key_concepts)}
-Difficulty: {chapter.difficulty}
+        chapter_questions = await self.generate_questions_from_config(config)
 
-Generate:
-- {num_mcq} multiple choice questions (4 options each, one correct)
-- {num_true_false} true/false questions
+        # Convert back to legacy dict format
+        return {
+            "mcq": [
+                {
+                    "id": q.id,
+                    "question": q.question_text,
+                    "options": q.options,
+                    "correct_answer": q.correct_answer,
+                    "explanation": q.explanation,
+                    "difficulty": q.difficulty.value
+                }
+                for q in chapter_questions.mcq_questions
+            ],
+            "true_false": [
+                {
+                    "id": q.id,
+                    "question": q.question_text,
+                    "correct_answer": q.correct_answer,
+                    "explanation": q.explanation,
+                    "difficulty": q.difficulty.value
+                }
+                for q in chapter_questions.true_false_questions
+            ]
+        }
 
-For each question include:
-1. Question text
-2. Options (for MCQ)
-3. Correct answer
-4. Explanation (why this answer is correct)
-5. Difficulty level (easy/medium/hard)
+    async def generate_questions_from_config(
+        self,
+        config: QuestionGenerationConfig
+    ) -> ChapterQuestions:
+        """
+        Generate quiz questions using full configuration.
 
-Return ONLY valid JSON:
+        Uses OpenAI's response_format={"type": "json_object"} for reliable JSON.
+
+        Args:
+            config: QuestionGenerationConfig with all generation parameters
+
+        Returns:
+            ChapterQuestions object with generated questions
+        """
+        key_concepts_str = ", ".join(config.key_concepts) if config.key_concepts else "General chapter concepts"
+
+        # Determine question length guidance based on difficulty
+        if config.difficulty == "beginner":
+            length_guidance = "Keep questions SHORT (1-2 lines). Use simple vocabulary."
+        elif config.difficulty == "advanced":
+            length_guidance = "Scenario-based questions can be LONGER (3-8 lines). Use precise technical language."
+        else:
+            length_guidance = "Questions should be MODERATE length (2-4 lines). Balance clarity with depth."
+
+        prompt = f"""Create questions for this chapter from a {config.difficulty} course on {config.topic}.
+
+Chapter {config.chapter_number}: {config.chapter_title}
+Key Concepts to Cover: {key_concepts_str}
+Target Audience: {config.audience}
+
+Generate EXACTLY:
+- {config.recommended_mcq_count} Multiple Choice Questions
+- {config.recommended_tf_count} True/False Questions
+
+RULES:
+1. Language must be appropriate for {config.audience}
+2. {length_guidance}
+3. Cover ALL key concepts (at least 1 question per concept)
+4. Mix difficulties: ~30% easy, ~50% medium, ~20% hard
+5. MCQ options: exactly 4 options (A, B, C, D), one clearly correct, plausible distractors
+6. NO trick questions or deliberately confusing wording
+7. NO "All of the above" or "None of the above" options
+8. Each question MUST have a clear explanation for the correct answer
+9. True/False statements must be definitively true or false, not ambiguous
+
+Return JSON with this structure:
 {{
   "mcq": [
     {{
-      "id": "mcq_1",
-      "question": "...",
-      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "question_text": "Clear question text here?",
+      "options": ["A) First option", "B) Second option", "C) Third option", "D) Fourth option"],
       "correct_answer": "A",
-      "explanation": "...",
-      "difficulty": "medium"
+      "explanation": "Explanation of why A is correct...",
+      "difficulty": "easy"
     }}
   ],
   "true_false": [
     {{
-      "id": "tf_1",
-      "question": "...",
+      "question_text": "A clear statement that is definitively true or false.",
       "correct_answer": true,
-      "explanation": "...",
-      "difficulty": "easy"
+      "explanation": "Explanation of why this is true/false...",
+      "difficulty": "medium"
     }}
   ]
 }}"""
-        
+
         response = await self.client.chat.completions.create(
             model=settings.model_question_generation,
             max_tokens=settings.max_tokens_question,
-            temperature=settings.temperature,
+            temperature=0.7,
             messages=[
-                {"role": "system", "content": "You are an expert at creating educational assessments. Always return valid JSON."},
+                {"role": "system", "content": "You are an expert exam creator. Generate high-quality assessment questions. Always return valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}
         )
-        
+
+        # Parse response (already JSON due to response_format)
         response_text = response.choices[0].message.content
-        return json.loads(response_text)
+        data = json.loads(response_text)
+
+        # Create MCQ questions
+        mcq_questions = []
+        for item in data.get("mcq", []):
+            try:
+                mcq_questions.append(MCQQuestion(
+                    id=str(uuid.uuid4()),
+                    difficulty=self._map_difficulty(item.get("difficulty", "medium")),
+                    question_text=item["question_text"],
+                    options=item["options"],
+                    correct_answer=item["correct_answer"],
+                    explanation=item["explanation"],
+                    points=1
+                ))
+            except Exception:
+                continue
+
+        # Create True/False questions
+        tf_questions = []
+        for item in data.get("true_false", []):
+            try:
+                tf_questions.append(TrueFalseQuestion(
+                    id=str(uuid.uuid4()),
+                    difficulty=self._map_difficulty(item.get("difficulty", "medium")),
+                    question_text=item["question_text"],
+                    correct_answer=bool(item["correct_answer"]),
+                    explanation=item["explanation"],
+                    points=1
+                ))
+            except Exception:
+                continue
+
+        return ChapterQuestions(
+            chapter_number=config.chapter_number,
+            chapter_title=config.chapter_title,
+            mcq_questions=mcq_questions,
+            true_false_questions=tf_questions
+        )
     
     async def generate_feedback(
         self, 

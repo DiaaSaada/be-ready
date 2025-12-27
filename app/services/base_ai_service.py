@@ -6,6 +6,7 @@ This ensures consistent input/output regardless of provider.
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from app.models.course import Chapter, CourseConfig
+from app.models.question import QuestionGenerationConfig, ChapterQuestions
 
 
 class BaseAIService(ABC):
@@ -36,23 +37,57 @@ class BaseAIService(ABC):
     
     @abstractmethod
     async def generate_questions(
-        self, 
-        chapter: Chapter, 
-        num_mcq: int = 5, 
+        self,
+        chapter: Chapter,
+        num_mcq: int = 5,
         num_true_false: int = 3
     ) -> Dict[str, Any]:
         """
-        Generate quiz questions for a chapter.
-        
+        Generate quiz questions for a chapter (legacy method).
+
         Args:
             chapter: The chapter object
             num_mcq: Number of multiple choice questions
             num_true_false: Number of true/false questions
-            
+
         Returns:
             Dictionary with 'mcq' and 'true_false' question arrays
         """
         pass
+
+    async def generate_questions_from_config(
+        self,
+        config: QuestionGenerationConfig
+    ) -> Dict[str, Any]:
+        """
+        Generate quiz questions using a full configuration object.
+
+        This method provides more control over question generation with
+        audience targeting, key concepts, and detailed configuration.
+
+        Args:
+            config: QuestionGenerationConfig with all generation parameters
+
+        Returns:
+            Dictionary with 'mcq' and 'true_false' question arrays
+
+        Note:
+            Default implementation calls generate_questions() for backward compatibility.
+            Providers can override this for enhanced generation.
+        """
+        # Default: create a minimal Chapter and delegate to generate_questions
+        chapter = Chapter(
+            number=config.chapter_number,
+            title=config.chapter_title,
+            summary=f"Chapter on {config.topic}",
+            key_concepts=config.key_concepts,
+            difficulty=config.difficulty
+        )
+        return await self.generate_questions(
+            chapter,
+            num_mcq=config.recommended_mcq_count,
+            num_true_false=config.recommended_tf_count
+        )
     
     @abstractmethod
     async def generate_feedback(

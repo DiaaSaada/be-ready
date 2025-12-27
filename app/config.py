@@ -34,6 +34,7 @@ class UseCase(str, Enum):
     """Different use cases for AI services."""
     CHAPTER_GENERATION = "chapter_generation"
     QUESTION_GENERATION = "question_generation"
+    QUESTION_COUNT_ANALYSIS = "question_count_analysis"
     STUDENT_FEEDBACK = "student_feedback"
     ANSWER_CHECKING = "answer_checking"
     RAG_QUERY = "rag_query"
@@ -67,7 +68,8 @@ class Settings(BaseSettings):
     # AI Model Configuration per Use Case
     # These can be changed for A/B testing different models
     model_chapter_generation: str = "claude-sonnet-4-20250514"
-    model_question_generation: str = "claude-sonnet-4-20250514"
+    model_question_generation: str = "claude-3-5-haiku-20241022"
+    model_question_count_analysis: str = "claude-3-5-haiku-20241022"
     model_student_feedback: str = "claude-sonnet-4-20250514"
     model_answer_checking: str = "claude-3-5-haiku-20241022"
     model_rag_query: str = "claude-3-5-haiku-20241022"
@@ -75,7 +77,8 @@ class Settings(BaseSettings):
     
     # AI Settings
     max_tokens_chapter: int = 4000
-    max_tokens_question: int = 2000
+    max_tokens_question: int = 8000
+    max_tokens_question_count: int = 300
     max_tokens_feedback: int = 1500
     max_tokens_answer: int = 500
     max_tokens_rag: int = 1000
@@ -106,6 +109,7 @@ class Settings(BaseSettings):
         use_case_map = {
             UseCase.CHAPTER_GENERATION: self.model_chapter_generation,
             UseCase.QUESTION_GENERATION: self.model_question_generation,
+            UseCase.QUESTION_COUNT_ANALYSIS: self.model_question_count_analysis,
             UseCase.STUDENT_FEEDBACK: self.model_student_feedback,
             UseCase.ANSWER_CHECKING: self.model_answer_checking,
             UseCase.RAG_QUERY: self.model_rag_query,
@@ -145,6 +149,7 @@ class Settings(BaseSettings):
         use_case_map = {
             UseCase.CHAPTER_GENERATION: self.max_tokens_chapter,
             UseCase.QUESTION_GENERATION: self.max_tokens_question,
+            UseCase.QUESTION_COUNT_ANALYSIS: self.max_tokens_question_count,
             UseCase.STUDENT_FEEDBACK: self.max_tokens_feedback,
             UseCase.ANSWER_CHECKING: self.max_tokens_answer,
             UseCase.RAG_QUERY: self.max_tokens_rag,

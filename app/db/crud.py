@@ -202,6 +202,189 @@ async def get_questions(
     return questions
 
 
+# Collection for incremental question batches
+QUESTION_BATCHES_COLLECTION = "question_batches"
+
+
+async def save_question_batch(
+    course_topic: str,
+    difficulty: str,
+    chapter_number: int,
+    key_concept: str,
+    mcq: List[Dict[str, Any]],
+    true_false: List[Dict[str, Any]],
+    provider: str
+) -> Optional[str]:
+    """
+    Save a batch of questions for a single key concept.
+    Used for incremental question generation.
+
+    Args:
+        course_topic: The course topic
+        difficulty: Course difficulty level
+        chapter_number: Chapter number
+        key_concept: The specific concept these questions cover
+        mcq: Multiple choice questions for this concept
+        true_false: True/False questions for this concept
+        provider: AI provider used
+
+    Returns:
+        Inserted document ID or None if DB not connected
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return None
+
+    normalized_topic = course_topic.lower().strip()
+    normalized_concept = key_concept.lower().strip()
+
+    document = {
+        "course_topic": normalized_topic,
+        "difficulty": difficulty,
+        "chapter_number": chapter_number,
+        "key_concept": normalized_concept,
+        "original_concept": key_concept,
+        "mcq": mcq,
+        "true_false": true_false,
+        "provider": provider,
+        "created_at": datetime.utcnow()
+    }
+
+    # Upsert: update if exists for this concept, insert if not
+    result = await db[QUESTION_BATCHES_COLLECTION].update_one(
+        {
+            "course_topic": normalized_topic,
+            "difficulty": difficulty,
+            "chapter_number": chapter_number,
+            "key_concept": normalized_concept
+        },
+        {"$set": document},
+        upsert=True
+    )
+
+    return str(result.upserted_id) if result.upserted_id else "updated"
+
+
+async def get_question_batches(
+    course_topic: str,
+    difficulty: str,
+    chapter_number: int
+) -> List[Dict[str, Any]]:
+    """
+    Get all question batches for a chapter.
+
+    Args:
+        course_topic: The course topic
+        difficulty: Course difficulty level
+        chapter_number: Chapter number
+
+    Returns:
+        List of question batch documents
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return []
+
+    normalized_topic = course_topic.lower().strip()
+
+    cursor = db[QUESTION_BATCHES_COLLECTION].find({
+        "course_topic": normalized_topic,
+        "difficulty": difficulty,
+        "chapter_number": chapter_number
+    })
+
+    batches = await cursor.to_list(length=50)
+    return batches
+
+
+async def aggregate_question_batches(
+    course_topic: str,
+    difficulty: str,
+    chapter_number: int,
+    chapter_title: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Aggregate all question batches for a chapter into a single document.
+    Also saves the aggregated result to the main questions collection.
+
+    Args:
+        course_topic: The course topic
+        difficulty: Course difficulty level
+        chapter_number: Chapter number
+        chapter_title: Chapter title for the aggregated document
+
+    Returns:
+        Aggregated questions document or None if no batches found
+    """
+    batches = await get_question_batches(course_topic, difficulty, chapter_number)
+
+    if not batches:
+        return None
+
+    # Aggregate all MCQ and T/F questions from batches
+    all_mcq = []
+    all_tf = []
+    provider = batches[0].get("provider", "unknown") if batches else "unknown"
+
+    for batch in batches:
+        all_mcq.extend(batch.get("mcq", []))
+        all_tf.extend(batch.get("true_false", []))
+
+    # Save aggregated result to main questions collection
+    await save_questions(
+        course_topic=course_topic,
+        difficulty=difficulty,
+        chapter_number=chapter_number,
+        chapter_title=chapter_title,
+        mcq=all_mcq,
+        true_false=all_tf,
+        provider=provider
+    )
+
+    return {
+        "course_topic": course_topic.lower().strip(),
+        "difficulty": difficulty,
+        "chapter_number": chapter_number,
+        "chapter_title": chapter_title,
+        "mcq": all_mcq,
+        "true_false": all_tf,
+        "provider": provider,
+        "batches_aggregated": len(batches)
+    }
+
+
+async def delete_question_batches(
+    course_topic: str,
+    difficulty: str,
+    chapter_number: int
+) -> int:
+    """
+    Delete all question batches for a chapter.
+    Call this after successful aggregation to clean up.
+
+    Args:
+        course_topic: The course topic
+        difficulty: Course difficulty level
+        chapter_number: Chapter number
+
+    Returns:
+        Number of deleted documents
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return 0
+
+    normalized_topic = course_topic.lower().strip()
+
+    result = await db[QUESTION_BATCHES_COLLECTION].delete_many({
+        "course_topic": normalized_topic,
+        "difficulty": difficulty,
+        "chapter_number": chapter_number
+    })
+
+    return result.deleted_count
+
+
 # =============================================================================
 # User Progress Operations
 # =============================================================================
