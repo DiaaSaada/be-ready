@@ -32,6 +32,11 @@ tags_metadata = [
         "description": "**Question Generation** - Generate MCQ and True/False questions for chapters. "
                        "Features AI-based question count analysis and difficulty-aware generation.",
     },
+    {
+        "name": "progress",
+        "description": "**Progress Tracking** - Track user quiz results and progress. "
+                       "Save scores, view history, and get progress summaries.",
+    },
 ]
 
 
@@ -172,11 +177,12 @@ async def health_check():
 
 
 # Import routers
-from app.routers import courses, questions
+from app.routers import courses, questions, progress
 
 # Include routers
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(questions.router, prefix="/api/v1/questions", tags=["questions"])
+app.include_router(progress.router, prefix="/api/v1/progress", tags=["progress"])
 
 
 if __name__ == "__main__":
