@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { progressAPI } from '../services/api';
-import { getUserId } from '../utils/user';
+import { useAuth } from '../contexts/AuthContext';
+import Header from '../components/Header';
 
 function Progress() {
+  const { user } = useAuth();
   const [progress, setProgress] = useState([]);
   const [summary, setSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -13,7 +15,7 @@ function Progress() {
     const fetchProgress = async () => {
       try {
         setIsLoading(true);
-        const userId = getUserId();
+        const userId = user?.id;
 
         // Fetch progress and summary in parallel
         const [progressData, summaryData] = await Promise.all([
@@ -57,22 +59,7 @@ function Progress() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-blue-600">
-            Be Ready
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/app"
-              className="text-sm text-gray-600 hover:text-gray-900"
-            >
-              New Course
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">My Progress</h1>

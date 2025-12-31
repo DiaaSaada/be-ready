@@ -117,4 +117,23 @@ export const healthCheck = async () => {
   return response.data;
 };
 
+// Response interceptor to handle 401 errors (token expired/invalid)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear stored auth data
+      localStorage.removeItem('beready_token');
+      localStorage.removeItem('beready_user');
+      delete api.defaults.headers.common['Authorization'];
+
+      // Redirect to login if not already there
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;

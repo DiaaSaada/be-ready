@@ -21,6 +21,10 @@ chromadb==0.5.20
 pypdf2==3.0.1
 pymupdf==1.24.13
 
+# Authentication
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+
 # Utilities
 python-dotenv==1.0.1
 pydantic==2.10.3

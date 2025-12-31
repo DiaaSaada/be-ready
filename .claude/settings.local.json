@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjk1NTMzZWU4OWY1NzRkM2U4NmJlMWZmIiwiZW1haWwiOiJ0ZXN0NkBleGFtcGxlLmNvbSIsImV4cCI6MTc2NzI4ODgzM30.C-V06Cv7GnHKANc_CBHAsanefenfzQ3FJ4VPfGS1tNs\")"
+    ]
+  }
+}

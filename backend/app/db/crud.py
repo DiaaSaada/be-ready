@@ -4,6 +4,7 @@ Provides async database operations for courses, questions, and progress.
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from bson import ObjectId
 from app.db.connection import MongoDB
 from app.db.models import CourseDocument, QuestionDocument, UserProgressDocument
 from app.models.course import Chapter
@@ -110,6 +111,40 @@ async def get_all_courses() -> List[Dict[str, Any]]:
     courses = await cursor.to_list(length=100)
 
     return courses
+
+
+async def get_courses_by_ids(course_ids: List[str]) -> List[Dict[str, Any]]:
+    """
+    Get multiple courses by their MongoDB _ids.
+
+    Args:
+        course_ids: List of course MongoDB ObjectId strings
+
+    Returns:
+        List of course documents
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return []
+
+    if not course_ids:
+        return []
+
+    try:
+        # Convert string IDs to ObjectId
+        object_ids = [ObjectId(cid) for cid in course_ids]
+
+        # Query with $in operator
+        cursor = db[COURSES_COLLECTION].find({"_id": {"$in": object_ids}})
+        courses = await cursor.to_list(length=100)
+
+        # Add string id field for each course
+        for course in courses:
+            course["id"] = str(course["_id"])
+
+        return courses
+    except Exception:
+        return []
 
 
 # =============================================================================

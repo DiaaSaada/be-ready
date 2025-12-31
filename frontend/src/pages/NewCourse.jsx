@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { courseAPI } from '../services/api';
+import Header from '../components/Header';
 
 function NewCourse() {
   const navigate = useNavigate();
@@ -53,20 +54,7 @@ function NewCourse() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-blue-600">
-            📚 Be Ready
-          </Link>
-          <Link
-            to="/app/progress"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            My Progress
-          </Link>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="max-w-2xl mx-auto px-4 py-12">

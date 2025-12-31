@@ -48,9 +48,12 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: Optional[str] = None
 
-    # Clerk Authentication
-    clerk_publishable_key: str = ""
-    clerk_secret_key: str = ""
+    # JWT Authentication
+    jwt_secret_key: str = "change-me-in-production-use-a-long-random-string"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 1440  # 24 hours
+
+    # Frontend URL (for CORS)
     frontend_url: str = "http://localhost:5173"
 
     # MongoDB Configuration

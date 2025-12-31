@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useLocation, Link, Navigate } from 'react-router-dom';
 import { progressAPI } from '../services/api';
-import { getUserId } from '../utils/user';
+import { useAuth } from '../contexts/AuthContext';
+import Header from '../components/Header';
 
 function QuizResults() {
   const location = useLocation();
+  const { user } = useAuth();
   const { topic, difficulty, chapter, questions, answers } = location.state || {};
 
   // Save status
@@ -25,7 +27,7 @@ function QuizResults() {
     const saveProgress = async () => {
       try {
         setSaveStatus('saving');
-        const userId = getUserId();
+        const userId = user?.id;
 
         // Format answers for API
         const formattedAnswers = Object.entries(answers).map(([index, answer]) => ({
@@ -72,15 +74,7 @@ function QuizResults() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-blue-600">
-            BeReady
-          </Link>
-          <span className="text-sm text-gray-500">Quiz Results</span>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-2xl mx-auto px-4 py-8">
         {/* Score Card */}

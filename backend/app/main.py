@@ -23,6 +23,10 @@ tags_metadata = [
         "description": "Health check and status endpoints.",
     },
     {
+        "name": "auth",
+        "description": "**Authentication** - User signup, login, and session management.",
+    },
+    {
         "name": "courses",
         "description": "**Course Generation** - Create AI-powered courses from topics. "
                        "Includes topic validation, chapter generation, and course configuration.",
@@ -177,12 +181,14 @@ async def health_check():
 
 
 # Import routers
-from app.routers import courses, questions, progress
+from app.routers import auth, courses, questions, progress, my_courses
 
 # Include routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(questions.router, prefix="/api/v1/questions", tags=["questions"])
 app.include_router(progress.router, prefix="/api/v1/progress", tags=["progress"])
+app.include_router(my_courses.router, prefix="/api/v1/my-courses", tags=["my-courses"])
 
 
 if __name__ == "__main__":

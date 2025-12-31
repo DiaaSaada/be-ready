@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
 import { questionAPI } from '../services/api';
+import Header from '../components/Header';
 
 function Quiz() {
   const location = useLocation();
@@ -174,25 +175,7 @@ function Quiz() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-xl font-bold text-blue-600">
-              BeReady
-            </Link>
-            <Link
-              to="/app/progress"
-              className="text-sm text-gray-600 hover:text-gray-900"
-            >
-              My Progress
-            </Link>
-          </div>
-          <span className="text-sm text-gray-500">
-            {chapter.title}
-          </span>
-        </div>
-      </header>
+      <Header />
 
       {/* Progress Bar */}
       <div className="bg-white border-b">

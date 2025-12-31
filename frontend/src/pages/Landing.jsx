@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 function Landing() {
+  const { isAuthenticated, isLoading } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
       <div className="text-center text-white px-4">
@@ -36,10 +39,10 @@ function Landing() {
 
         {/* CTA Button */}
         <Link
-          to="/app"
+          to={isAuthenticated ? "/app" : "/signup"}
           className="inline-block bg-white text-blue-600 font-semibold px-8 py-4 rounded-xl text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
         >
-          Get Started →
+          {isLoading ? 'Loading...' : isAuthenticated ? 'Go to App →' : 'Get Started →'}
         </Link>
 
         {/* Footer text */}
