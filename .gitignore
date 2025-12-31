@@ -1,8 +1,26 @@
+# Environment
 .env
-/app/__pycache__
-/app/**/__pycache__
 
-/backend/logs
-/backend/app/__pycache__
-/backend/app/__pycache__
-/backend/app/models
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db

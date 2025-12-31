@@ -43,11 +43,16 @@ class UseCase(str, Enum):
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     # API Keys
     anthropic_api_key: str = ""
     openai_api_key: Optional[str] = None
-    
+
+    # Clerk Authentication
+    clerk_publishable_key: str = ""
+    clerk_secret_key: str = ""
+    frontend_url: str = "http://localhost:5173"
+
     # MongoDB Configuration
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "ai_learning_platform"
@@ -93,7 +98,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        protected_namespaces=('settings_',)
     )
     
     def get_model_for_use_case(self, use_case: UseCase) -> str:
