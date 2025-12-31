@@ -179,7 +179,7 @@ function Quiz() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/" className="text-xl font-bold text-blue-600">
-              Be Ready
+              BeReady
             </Link>
             <Link
               to="/app/progress"
@@ -214,11 +214,10 @@ function Quiz() {
       <main className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-white rounded-xl shadow-sm p-6">
           {/* Question Type Badge */}
-          <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full mb-4 ${
-            currentQuestion.type === 'mcq'
+          <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full mb-4 ${currentQuestion.type === 'mcq'
               ? 'bg-purple-100 text-purple-700'
               : 'bg-blue-100 text-blue-700'
-          }`}>
+            }`}>
             {currentQuestion.type === 'mcq' ? 'Multiple Choice' : 'True / False'}
           </span>
 
@@ -243,26 +242,24 @@ function Quiz() {
                     key={idx}
                     onClick={() => handleAnswerSelect(optionLetter)}
                     disabled={showFeedback}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      showCorrect
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${showCorrect
                         ? 'border-green-500 bg-green-50'
                         : showIncorrect
-                        ? 'border-red-500 bg-red-50'
-                        : isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    } ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
+                          ? 'border-red-500 bg-red-50'
+                          : isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                      } ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start gap-3">
-                      <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-medium ${
-                        showCorrect
+                      <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-medium ${showCorrect
                           ? 'bg-green-500 text-white'
                           : showIncorrect
-                          ? 'bg-red-500 text-white'
-                          : isSelected
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
+                            ? 'bg-red-500 text-white'
+                            : isSelected
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-100 text-gray-700'
+                        }`}>
                         {optionLetter}
                       </span>
                       <span className="text-gray-700 pt-1">{option}</span>
@@ -283,26 +280,24 @@ function Quiz() {
                     key={option}
                     onClick={() => handleAnswerSelect(option)}
                     disabled={showFeedback}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      showCorrect
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${showCorrect
                         ? 'border-green-500 bg-green-50'
                         : showIncorrect
-                        ? 'border-red-500 bg-red-50'
-                        : isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    } ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
+                          ? 'border-red-500 bg-red-50'
+                          : isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                      } ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-medium ${
-                        showCorrect
+                      <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-medium ${showCorrect
                           ? 'bg-green-500 text-white'
                           : showIncorrect
-                          ? 'bg-red-500 text-white'
-                          : isSelected
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
+                            ? 'bg-red-500 text-white'
+                            : isSelected
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-100 text-gray-700'
+                        }`}>
                         {option === 'True' ? 'T' : 'F'}
                       </span>
                       <span className="text-gray-700 font-medium">{option}</span>
@@ -315,16 +310,14 @@ function Quiz() {
 
           {/* Feedback / Explanation */}
           {showFeedback && currentQuestion.explanation && (
-            <div className={`mt-6 p-4 rounded-lg ${
-              answers[currentIndex]?.isCorrect || selectedAnswer === currentQuestion.correct_answer
+            <div className={`mt-6 p-4 rounded-lg ${answers[currentIndex]?.isCorrect || selectedAnswer === currentQuestion.correct_answer
                 ? 'bg-green-50 border border-green-200'
                 : 'bg-red-50 border border-red-200'
-            }`}>
-              <p className={`font-medium mb-1 ${
-                answers[currentIndex]?.isCorrect || selectedAnswer === currentQuestion.correct_answer
+              }`}>
+              <p className={`font-medium mb-1 ${answers[currentIndex]?.isCorrect || selectedAnswer === currentQuestion.correct_answer
                   ? 'text-green-700'
                   : 'text-red-700'
-              }`}>
+                }`}>
                 {answers[currentIndex]?.isCorrect || selectedAnswer === currentQuestion.correct_answer
                   ? 'Correct!'
                   : 'Incorrect'}

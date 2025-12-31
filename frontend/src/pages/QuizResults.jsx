@@ -76,7 +76,7 @@ function QuizResults() {
       <header className="bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="text-xl font-bold text-blue-600">
-            Be Ready
+            BeReady
           </Link>
           <span className="text-sm text-gray-500">Quiz Results</span>
         </div>
@@ -129,15 +129,13 @@ function QuizResults() {
             return (
               <div
                 key={index}
-                className={`bg-white rounded-xl shadow-sm p-5 border-l-4 ${
-                  isCorrect ? 'border-green-500' : 'border-red-500'
-                }`}
+                className={`bg-white rounded-xl shadow-sm p-5 border-l-4 ${isCorrect ? 'border-green-500' : 'border-red-500'
+                  }`}
               >
                 {/* Question Number & Type */}
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white ${
-                    isCorrect ? 'bg-green-500' : 'bg-red-500'
-                  }`}>
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white ${isCorrect ? 'bg-green-500' : 'bg-red-500'
+                    }`}>
                     {index + 1}
                   </span>
                   <span className="text-xs text-gray-400 uppercase">
