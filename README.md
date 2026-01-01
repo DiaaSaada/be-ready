@@ -152,7 +152,8 @@ curl http://localhost:8000/health
 - [ ] RAG system for contextual help
 - [ ] Gemini AI provider
 - [ ] Chapter verification with secondary LLM
-- [ ] Frontend integration
+- [x] Frontend integration
+- [ ] Improve the topic title before generation
 
 ## Environment Variables
 
