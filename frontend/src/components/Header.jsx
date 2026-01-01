@@ -25,6 +25,12 @@ function Header() {
             New Course
           </Link>
           <Link
+            to="/app/my-courses"
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            My Courses
+          </Link>
+          <Link
             to="/app/progress"
             className="text-sm text-gray-600 hover:text-gray-900"
           >

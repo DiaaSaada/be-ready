@@ -15,6 +15,7 @@ function NewCourse() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // Validate topic
   const handleValidate = async (e) => {
@@ -39,11 +40,19 @@ function NewCourse() {
   const handleGenerate = async () => {
     setIsGenerating(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       const result = await courseAPI.generate(topic, difficulty);
-      // Navigate to course page with the generated data
-      navigate('/app/course', { state: { course: result } });
+
+      // Show success message
+      setSuccessMessage(`Course "${result.topic}" created successfully!`);
+      setIsGenerating(false);
+
+      // Redirect to my courses after 1.5 seconds
+      setTimeout(() => {
+        navigate('/app/my-courses');
+      }, 1500);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to generate course');
       setIsGenerating(false);
@@ -137,6 +146,21 @@ function NewCourse() {
           )}
         </form>
 
+        {/* Success Message */}
+        {successMessage && (
+          <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <div>
+                <p className="text-green-700 font-medium">{successMessage}</p>
+                <p className="text-green-600 text-sm">Redirecting to My Courses...</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -207,7 +231,7 @@ function NewCourse() {
         )}
 
         {/* Generate Button */}
-        {isValidated && (
+        {isValidated && !successMessage && (
           <button
             onClick={handleGenerate}
             disabled={isGenerating}
@@ -222,7 +246,7 @@ function NewCourse() {
                 Generating Course...
               </span>
             ) : (
-              '🚀 Generate Course'
+              'Generate Course'
             )}
           </button>
         )}

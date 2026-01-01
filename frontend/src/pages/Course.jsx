@@ -1,14 +1,61 @@
-import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { courseAPI } from '../services/api';
 
 function Course() {
-  const location = useLocation();
+  const { courseId } = useParams();
   const navigate = useNavigate();
-  const course = location.state?.course;
+  const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // If no course data, redirect to new course page
-  if (!course) {
-    return <Navigate to="/app" replace />;
+  useEffect(() => {
+    const fetchCourse = async () => {
+      try {
+        setLoading(true);
+        const data = await courseAPI.getById(courseId);
+        setCourse(data);
+      } catch (err) {
+        console.error('Failed to fetch course:', err);
+        setError('Course not found or you do not have access.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourse();
+  }, [courseId]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          <p className="mt-4 text-gray-600">Loading course...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !course) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <p className="text-red-600 mb-4">{error || 'Course not found'}</p>
+          <Link
+            to="/app/my-courses"
+            className="text-blue-600 hover:underline"
+          >
+            Back to My Courses
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const handleStartQuiz = (chapter) => {

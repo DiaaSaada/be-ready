@@ -773,6 +773,69 @@ MONGODB_DB_NAME=ai_learning_platform
 - **User Courses** - Save/list/delete user's courses with ownership
 - **Course Enrollment** - Auto-enroll users on course generation
 
+## User Courses
+
+Courses are now linked to users and persist across sessions.
+
+### Database Model
+
+**CourseDocument** (MongoDB `courses` collection):
+```python
+{
+    "_id": ObjectId,
+    "user_id": str,              # User who created the course
+    "topic": str,                # Normalized topic (lowercase)
+    "original_topic": str,       # Original topic as entered
+    "difficulty": str,           # beginner/intermediate/advanced
+    "complexity_score": int,     # 1-10 (from validation)
+    "total_chapters": int,
+    "chapters": [                # Array of Chapter objects
+        {
+            "number": int,
+            "title": str,
+            "summary": str,
+            "key_concepts": [str],
+            "difficulty": str,
+            "estimated_time_minutes": int
+        }
+    ],
+    "provider": str,             # AI provider used (claude/openai/mock)
+    "created_at": datetime,
+    "updated_at": datetime
+}
+```
+
+### API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/courses/generate` | Yes | Create new course (auto-enrolls user) |
+| GET | `/api/v1/courses/my-courses` | Yes | Get user's created courses |
+| GET | `/api/v1/courses/{id}` | Yes | Get course details (owner only) |
+| DELETE | `/api/v1/courses/{id}` | Yes | Delete course (owner only) |
+
+### Frontend Integration
+
+**Routes:**
+- `/app/my-courses` - Grid of user's course cards (dashboard)
+- `/app/course` - Course detail view
+- `/app` or `/app/new` - Create new course
+
+**Flow:**
+1. User logs in → redirected to `/app/my-courses`
+2. User clicks "New Course" → `/app/new`
+3. Course generated → success message → redirect to `/app/my-courses`
+4. User clicks course card → navigate to course details
+
+**CourseCard Component** (`frontend/src/components/CourseCard.jsx`):
+- Topic title
+- Difficulty badge (color-coded: green/yellow/red)
+- Complexity score (X/10)
+- Chapter count
+- Quiz ready indicator
+- Relative date (Today, Yesterday, X days ago)
+- Delete button with confirmation
+
 ### TODO
 1. **PDF Upload** - Extract text from PDFs, generate chapters
 2. **AI Mentor Feedback** - Personalized study recommendations

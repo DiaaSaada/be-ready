@@ -12,8 +12,8 @@ function Login() {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get redirect destination
-  const from = location.state?.from?.pathname || '/app';
+  // Get redirect destination (default to my-courses dashboard)
+  const from = location.state?.from?.pathname || '/app/my-courses';
 
   const handleSubmit = async (e) => {
     e.preventDefault();

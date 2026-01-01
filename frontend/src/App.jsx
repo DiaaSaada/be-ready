@@ -5,6 +5,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import NewCourse from './pages/NewCourse';
+import MyCourses from './pages/MyCourses';
 import Course from './pages/Course';
 import Quiz from './pages/Quiz';
 import QuizResults from './pages/QuizResults';
@@ -31,7 +32,12 @@ function App() {
               <NewCourse />
             </ProtectedRoute>
           } />
-          <Route path="/app/course" element={
+          <Route path="/app/my-courses" element={
+            <ProtectedRoute>
+              <MyCourses />
+            </ProtectedRoute>
+          } />
+          <Route path="/app/course/:courseId" element={
             <ProtectedRoute>
               <Course />
             </ProtectedRoute>

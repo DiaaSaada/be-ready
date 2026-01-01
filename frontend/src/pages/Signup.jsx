@@ -27,7 +27,7 @@ function Signup() {
 
     try {
       await signup(name, email, password);
-      navigate('/app', { replace: true });
+      navigate('/app/my-courses', { replace: true });
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create account');
     } finally {
