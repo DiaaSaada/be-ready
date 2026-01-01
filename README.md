@@ -149,7 +149,7 @@ curl http://localhost:8000/health
 - [x] Auto-enrollment on generation
 - [ ] PDF processing service
 - [ ] AI mentor feedback
-- [ ] RAG system for contextual help
+- [ ] RAG system for contextual help  (https://github.com/yichuan-w/LEANN)
 - [ ] Gemini AI provider
 - [ ] Chapter verification with secondary LLM
 - [x] Frontend integration
