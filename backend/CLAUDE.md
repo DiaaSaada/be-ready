@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-An AI-powered learning platform backend built with FastAPI. The system takes topics or PDF materials, validates them, breaks them into chapters using AI (Claude/OpenAI), generates quiz questions, tracks user progress, and provides personalized mentoring feedback.
+An AI-powered learning platform backend built with FastAPI. The system takes topics or PDF materials, validates them, breaks them into chapters using AI (Claude/OpenAI/Gemini), generates quiz questions, tracks user progress, and provides personalized mentoring feedback.
 
 ## Tech Stack
 
 - **Framework**: FastAPI (Python 3.12)
 - **Database**: MongoDB with Motor (async driver)
-- **AI Providers**: Anthropic Claude, OpenAI GPT, Mock (for testing)
+- **AI Providers**: Anthropic Claude, OpenAI GPT, Google Gemini, Mock (for testing)
 - **PDF Processing**: PyPDF2, PyMuPDF - NOT YET IMPLEMENTED
 - **Validation**: Pydantic v2
 
@@ -34,6 +34,7 @@ be-ready/
 │   │   ├── mock_ai_service.py     # Mock implementation
 │   │   ├── claude_ai_service.py   # Anthropic Claude implementation
 │   │   ├── openai_ai_service.py   # OpenAI GPT implementation
+│   │   ├── gemini_ai_service.py   # Google Gemini implementation
 │   │   ├── topic_validator.py     # Topic validation service
 │   │   ├── course_configurator.py # Course structure configuration
 │   │   ├── question_analyzer.py   # AI-based question count analysis
@@ -713,18 +714,19 @@ Environment variables in `.env`:
 # API Keys
 ANTHROPIC_API_KEY=sk-ant-api03-...
 OPENAI_API_KEY=sk-...  # Optional
+GOOGLE_API_KEY=...     # Optional, for Gemini
 
-# Provider selection: mock | claude | openai
+# Provider selection: mock | claude | openai | gemini
 DEFAULT_AI_PROVIDER=mock
 
-# Models per use case
-MODEL_CHAPTER_GENERATION=mock           # or claude-sonnet-4-20250514
-MODEL_QUESTION_GENERATION=mock          # or claude-3-5-haiku-20241022
-MODEL_QUESTION_COUNT_ANALYSIS=mock      # or claude-3-5-haiku-20241022
-MODEL_STUDENT_FEEDBACK=mock             # or claude-sonnet-4-20250514
-MODEL_ANSWER_CHECKING=mock              # or claude-haiku-4-5-20251001
-MODEL_RAG_QUERY=mock                    # or claude-haiku-4-5-20251001
-MODEL_TOPIC_VALIDATION=mock             # or claude-haiku-3-5-20241022
+# Models per use case (claude-*, gpt-*, gemini-*)
+MODEL_CHAPTER_GENERATION=mock           # or claude-sonnet-4-20250514 or gemini-1.5-pro
+MODEL_QUESTION_GENERATION=mock          # or claude-3-5-haiku-20241022 or gemini-1.5-flash
+MODEL_QUESTION_COUNT_ANALYSIS=mock      # or claude-3-5-haiku-20241022 or gemini-1.5-flash
+MODEL_STUDENT_FEEDBACK=mock             # or claude-sonnet-4-20250514 or gemini-1.5-pro
+MODEL_ANSWER_CHECKING=mock              # or claude-haiku-4-5-20251001 or gemini-1.5-flash
+MODEL_RAG_QUERY=mock                    # or claude-haiku-4-5-20251001 or gemini-1.5-flash
+MODEL_TOPIC_VALIDATION=mock             # or claude-haiku-3-5-20241022 or gemini-1.5-flash
 
 # Token Limits
 MAX_TOKENS_CHAPTER=4000
@@ -747,6 +749,7 @@ MONGODB_DB_NAME=ai_learning_platform
 - Mock AI service (difficulty-aware with question templates)
 - Claude AI service implementation (chapters + questions)
 - OpenAI AI service implementation (chapters + questions)
+- Gemini AI service implementation (chapters + questions)
 - Topic Validator with quick + AI validation
 - Course Configurator with difficulty presets
 - MongoDB integration with caching
@@ -840,8 +843,7 @@ Courses are now linked to users and persist across sessions.
 1. **PDF Upload** - Extract text from PDFs, generate chapters
 2. **AI Mentor Feedback** - Personalized study recommendations
 3. **RAG System** - Vector embeddings for document Q&A
-4. **Gemini Provider** - Add Google Gemini as AI provider
-5. **Chapter Verification** - Double-check generated chapters with secondary LLM to ensure completeness
+4. **Chapter Verification** - Double-check generated chapters with secondary LLM to ensure completeness
 
 ## Code Style
 
@@ -852,6 +854,45 @@ Courses are now linked to users and persist across sessions.
 - Services go in `app/services/`
 - API routes go in `app/routers/`
 - Database operations go in `app/db/`
+
+## AI Provider Rules (IMPORTANT)
+
+**All new AI features MUST be LLM-agnostic and support mock provider:**
+
+1. **Use `AIServiceFactory`** - Never instantiate AI clients directly (no `AsyncAnthropic()`, `AsyncOpenAI()`, etc.)
+   ```python
+   # WRONG
+   self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+   # CORRECT
+   ai_service = AIServiceFactory.get_service(UseCase.YOUR_USE_CASE)
+   ```
+
+2. **Implement in `BaseAIService`** - Add new AI methods to the abstract base class first
+   ```python
+   # In base_ai_service.py
+   @abstractmethod
+   async def your_new_method(self, ...) -> YourReturnType:
+       pass
+   ```
+
+3. **Implement in ALL providers** - Claude, OpenAI, Gemini, AND Mock
+   - Mock implementation enables testing without API costs
+   - All providers must return the same response structure
+
+4. **Use `UseCase` enum** - Add new use cases to `config.py` for per-operation model selection
+   ```python
+   class UseCase(str, Enum):
+       YOUR_NEW_FEATURE = "your_new_feature"
+   ```
+
+5. **Support provider override** - API endpoints should accept `?provider=` query parameter
+
+**Why?** This ensures:
+- Easy A/B testing between providers
+- Cost optimization (use cheaper models where appropriate)
+- Testing without API costs (mock)
+- Future-proof for new providers
 
 ## Key Files to Understand
 

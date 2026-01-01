@@ -10,6 +10,7 @@ motor==3.6.0  # Async MongoDB driver
 # AI/ML
 anthropic==0.39.0
 openai==1.54.4  # Optional, if you want to use OpenAI
+google-generativeai>=0.8.0  # Optional, if you want to use Gemini
 langchain==0.3.7
 langchain-community==0.3.5
 sentence-transformers==3.3.1

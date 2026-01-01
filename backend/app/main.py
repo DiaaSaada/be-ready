@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI):
 
     print(f"\n   AI Configuration:")
     print(f"   Provider: {settings.default_ai_provider}")
+    print(f"   Topic Validation: {settings.model_topic_validation}")
     print(f"   Chapter Gen: {settings.model_chapter_generation}")
     print(f"   Question Gen: {settings.model_question_generation}")
     print(f"   Answer Check: {settings.model_answer_checking}")

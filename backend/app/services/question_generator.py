@@ -10,7 +10,6 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
-from anthropic import AsyncAnthropic
 
 # Setup logging for failed responses
 LOG_DIR = Path("logs")
@@ -25,6 +24,7 @@ from app.models.question import (
     QuestionDifficulty,
 )
 from app.services.question_analyzer import QuestionAnalyzer, get_question_analyzer
+from app.services.ai_service_factory import AIServiceFactory
 from app.config import settings, UseCase
 from app.db import crud
 
@@ -60,8 +60,11 @@ class QuestionGenerator:
             question_analyzer: Optional analyzer for determining question counts.
                              Uses singleton if not provided.
         """
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         self.question_analyzer = question_analyzer or get_question_analyzer()
+
+    def _get_ai_service(self):
+        """Get the AI service for question generation based on config."""
+        return AIServiceFactory.get_service(UseCase.QUESTION_GENERATION)
 
     def _derive_audience(self, difficulty: str) -> str:
         """
@@ -383,46 +386,26 @@ Return this exact JSON structure:
                 recommended_tf_count=config.recommended_tf_count
             )
 
-        prompt = self._build_prompt(config)
         last_error = None
+        ai_service = self._get_ai_service()
 
         for attempt in range(max_retries + 1):
             try:
-                start_time = time.time()
-
-                response = await self.client.messages.create(
-                    model=settings.model_question_generation,
-                    max_tokens=settings.max_tokens_question,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-
-                generation_time = int((time.time() - start_time) * 1000)
-
-                # Parse response
-                response_text = response.content[0].text
-                data = self._parse_response(response_text, attempt=attempt + 1)
-
-                # Create question objects
-                mcq_questions = self._create_mcq_questions(data.get("mcq", []))
-                tf_questions = self._create_tf_questions(data.get("true_false", []))
+                # Use the AI service to generate questions
+                chapter_questions = await ai_service.generate_questions_from_config(config)
 
                 # Validate
                 is_valid, error_msg = self._validate_questions(
-                    mcq_questions, tf_questions, config
+                    chapter_questions.mcq_questions,
+                    chapter_questions.true_false_questions,
+                    config
                 )
 
                 if not is_valid and attempt < max_retries:
                     last_error = error_msg
                     continue
 
-                # Build result
-                return ChapterQuestions(
-                    chapter_number=config.chapter_number,
-                    chapter_title=config.chapter_title,
-                    mcq_questions=mcq_questions,
-                    true_false_questions=tf_questions
-                )
+                return chapter_questions
 
             except json.JSONDecodeError as e:
                 last_error = f"JSON parsing failed: {str(e)}"
@@ -611,6 +594,8 @@ Return this exact JSON structure:
         failed_concepts: list[str] = []
 
         concepts = config.key_concepts if config.key_concepts else [config.topic]
+        ai_service = self._get_ai_service()
+        provider_name = ai_service.get_provider_name()
 
         for i, concept in enumerate(concepts):
             # Add leftover questions to the last concept
@@ -621,24 +606,24 @@ Return this exact JSON structure:
             logger.info(f"Generating questions for concept {i+1}/{len(concepts)}: {concept}")
 
             try:
-                # Build concept-specific prompt
-                prompt = self._build_concept_prompt(config, concept, mcq_count, tf_count)
-
-                # Call AI
-                response = await self.client.messages.create(
-                    model=settings.model_question_generation,
-                    max_tokens=settings.max_tokens_question,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": prompt}]
+                # Create a concept-specific config
+                concept_config = QuestionGenerationConfig(
+                    topic=config.topic,
+                    difficulty=config.difficulty,
+                    audience=config.audience,
+                    chapter_number=config.chapter_number,
+                    chapter_title=f"{config.chapter_title} - {concept}",
+                    key_concepts=[concept],
+                    recommended_mcq_count=mcq_count,
+                    recommended_tf_count=tf_count
                 )
 
-                # Parse response
-                response_text = response.content[0].text
-                data = self._parse_response(response_text, attempt=1)
+                # Use AI service to generate questions
+                chunk_result = await ai_service.generate_questions_from_config(concept_config)
 
-                # Create question objects
-                mcq_questions = self._create_mcq_questions(data.get("mcq", []))
-                tf_questions = self._create_tf_questions(data.get("true_false", []))
+                # Extract questions
+                mcq_questions = chunk_result.mcq_questions
+                tf_questions = chunk_result.true_false_questions
 
                 # Add to accumulators
                 all_mcq_questions.extend(mcq_questions)
@@ -653,7 +638,7 @@ Return this exact JSON structure:
                         key_concept=concept,
                         mcq=[q.model_dump() for q in mcq_questions],
                         true_false=[q.model_dump() for q in tf_questions],
-                        provider="claude"
+                        provider=provider_name
                     )
 
                 logger.info(f"Generated {len(mcq_questions)} MCQ + {len(tf_questions)} T/F for '{concept}'")

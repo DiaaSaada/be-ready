@@ -1,12 +1,13 @@
 """
 AI Service Factory
-Routes requests to the correct AI provider (Claude, OpenAI, or Mock).
+Routes requests to the correct AI provider (Claude, OpenAI, Gemini, or Mock).
 This is the main entry point for all AI operations.
 """
 from typing import Optional
 from app.services.base_ai_service import BaseAIService
 from app.services.claude_ai_service import ClaudeAIService
 from app.services.openai_ai_service import OpenAIService
+from app.services.gemini_ai_service import GeminiAIService
 from app.services.mock_ai_service import MockAIService
 from app.config import settings, UseCase
 
@@ -79,6 +80,8 @@ class AIServiceFactory:
             service = ClaudeAIService(model=model)
         elif provider == "openai":
             service = OpenAIService(model=model)
+        elif provider == "gemini":
+            service = GeminiAIService(model=model)
         else:
             raise ValueError(f"Unknown AI provider: {provider}")
         
@@ -121,13 +124,16 @@ class AIServiceFactory:
     def get_available_providers(cls) -> list:
         """Get list of available AI providers."""
         providers = ["mock"]  # Mock is always available
-        
+
         if settings.anthropic_api_key:
             providers.append("claude")
-        
+
         if settings.openai_api_key:
             providers.append("openai")
-        
+
+        if settings.google_api_key:
+            providers.append("gemini")
+
         return providers
     
     @classmethod

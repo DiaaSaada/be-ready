@@ -11,6 +11,7 @@ class AIProvider(str, Enum):
     """Available AI providers."""
     CLAUDE = "claude"
     OPENAI = "openai"
+    GEMINI = "gemini"
     MOCK = "mock"
 
 
@@ -20,12 +21,17 @@ class AIModel(str, Enum):
     CLAUDE_OPUS_4 = "claude-opus-4-20250514"
     CLAUDE_SONNET_4 = "claude-sonnet-4-20250514"
     CLAUDE_HAIKU_35 = "claude-3-5-haiku-20241022"
-    
+
     # OpenAI models
     GPT_4_TURBO = "gpt-4-turbo-preview"
     GPT_4O = "gpt-4o"
     GPT_35_TURBO = "gpt-3.5-turbo"
-    
+
+    # Gemini models
+    GEMINI_15_PRO = "gemini-1.5-pro"
+    GEMINI_15_FLASH = "gemini-1.5-flash"
+    GEMINI_20_FLASH = "gemini-2.0-flash"
+
     # Mock
     MOCK = "mock"
 
@@ -47,6 +53,7 @@ class Settings(BaseSettings):
     # API Keys
     anthropic_api_key: str = ""
     openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
 
     # JWT Authentication
     jwt_secret_key: str = "change-me-in-production-use-a-long-random-string"
@@ -129,12 +136,12 @@ class Settings(BaseSettings):
     def get_provider_for_model(self, model: str) -> str:
         """
         Determine which provider to use based on the model name.
-        
+
         Args:
             model: Model identifier string
-            
+
         Returns:
-            Provider name (claude, openai, mock)
+            Provider name (claude, openai, gemini, mock)
         """
         if model == "mock":
             return "mock"
@@ -142,6 +149,8 @@ class Settings(BaseSettings):
             return "claude"
         elif model.startswith("gpt"):
             return "openai"
+        elif model.startswith("gemini"):
+            return "gemini"
         else:
             return self.default_ai_provider
     

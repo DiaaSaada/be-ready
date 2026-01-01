@@ -6,7 +6,6 @@ Uses quick pattern matching and AI-based validation.
 import json
 import re
 from typing import Optional
-from anthropic import AsyncAnthropic
 from app.models.validation import TopicValidationResult, TopicComplexity
 from app.config import settings
 from app.utils.llm_logger import llm_logger
@@ -45,7 +44,25 @@ class TopicValidator:
 
     def __init__(self):
         """Initialize the topic validator."""
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.model = settings.model_topic_validation
+        self.provider = settings.get_provider_for_model(self.model)
+        self._init_client()
+
+    def _init_client(self):
+        """Initialize the appropriate AI client based on provider."""
+        if self.provider == "claude":
+            from anthropic import AsyncAnthropic
+            self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        elif self.provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=settings.google_api_key)
+            self.client = genai.GenerativeModel(self.model)
+        elif self.provider == "openai":
+            from openai import AsyncOpenAI
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        else:
+            # Mock provider - no client needed
+            self.client = None
 
     def _normalize_topic(self, topic: str) -> str:
         """
@@ -263,17 +280,57 @@ Guidelines:
 - For certifications, base estimated_chapters on official exam domains"""
 
         try:
-            start_time = llm_logger.log_request(settings.model_topic_validation, prompt, "Topic Validation")
-            response = await self.client.messages.create(
-                model=settings.model_topic_validation,
-                max_tokens=settings.max_tokens_validation,
-                temperature=0.3,  # Lower for consistent evaluation
-                messages=[{"role": "user", "content": prompt}]
-            )
-            llm_logger.log_response(start_time, "Topic Validation")
+            start_time = llm_logger.log_request(self.model, prompt, "Topic Validation")
 
-            # Parse response
-            response_text = response.content[0].text
+            # Call appropriate provider
+            if self.provider == "claude":
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=settings.max_tokens_validation,
+                    temperature=0.3,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.content[0].text
+            elif self.provider == "gemini":
+                # Gemini uses sync API, run in executor
+                import asyncio
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.generate_content(
+                        prompt,
+                        generation_config={
+                            "temperature": 0.3,
+                            "max_output_tokens": settings.max_tokens_validation
+                        }
+                    )
+                )
+                response_text = response.text
+            elif self.provider == "openai":
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=settings.max_tokens_validation,
+                    temperature=0.3,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.choices[0].message.content
+            else:
+                # Mock provider - return a default accepted response
+                return TopicValidationResult(
+                    status="accepted",
+                    topic=topic,
+                    normalized_topic=normalized,
+                    message="Topic validated (mock provider)",
+                    complexity=TopicComplexity(
+                        score=5,
+                        level="intermediate",
+                        estimated_chapters=6,
+                        estimated_hours=10.0,
+                        reasoning="Mock validation"
+                    )
+                )
+
+            llm_logger.log_response(start_time, "Topic Validation")
 
             # Extract JSON from response
             json_text = response_text
