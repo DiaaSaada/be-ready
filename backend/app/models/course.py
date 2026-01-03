@@ -34,8 +34,10 @@ class Chapter(BaseModel):
     title: str = Field(..., description="Chapter title")
     summary: str = Field(..., description="Brief summary of the chapter")
     key_concepts: List[str] = Field(default_factory=list, description="Key concepts covered")
+    key_ideas: Optional[List[str]] = Field(default=None, description="Key ideas extracted from source content")
     difficulty: str = Field(default="intermediate", description="Difficulty level: beginner, intermediate, or advanced")
     estimated_time_minutes: int = Field(default=30, description="Estimated time to complete this chapter in minutes")
+    source_excerpt: Optional[str] = Field(default=None, description="Brief excerpt from source content relevant to this chapter")
 
     class Config:
         json_schema_extra = {
@@ -116,3 +118,29 @@ class GenerateCourseResponse(BaseModel):
                 ]
             }
         }
+
+
+class FileUploadResult(BaseModel):
+    """Result of a single file upload and parsing."""
+    filename: str = Field(..., description="Original filename")
+    file_type: str = Field(..., description="File type (pdf, docx, txt)")
+    char_count: int = Field(..., description="Number of characters extracted")
+    success: bool = Field(..., description="Whether parsing was successful")
+    error: Optional[str] = Field(default=None, description="Error message if parsing failed")
+
+
+class GenerateFromFilesResponse(BaseModel):
+    """Response model for file-based course generation."""
+    id: Optional[str] = Field(default=None, description="Course ID (MongoDB ObjectId)")
+    topic: str = Field(..., description="Course topic (provided or inferred from content)")
+    difficulty: str = Field(..., description="Course difficulty level")
+    category: Optional[str] = Field(default=None, description="Topic category")
+    total_chapters: int = Field(..., description="Total number of chapters generated")
+    estimated_study_hours: float = Field(..., description="Total estimated study hours")
+    time_per_chapter_minutes: int = Field(..., description="Average time per chapter in minutes")
+    complexity_score: Optional[int] = Field(default=None, ge=1, le=10, description="Topic complexity score")
+    chapters: List[Chapter] = Field(..., description="List of generated chapters")
+    message: str = Field(default="Course generated successfully", description="Status message")
+    source_files: List[FileUploadResult] = Field(..., description="Results of file processing")
+    extracted_text_chars: int = Field(..., description="Total characters extracted from all files")
+    config: Optional[CourseConfig] = Field(default=None, description="Course configuration used")

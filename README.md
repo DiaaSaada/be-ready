@@ -6,6 +6,7 @@ An AI-powered learning platform that generates personalized courses and quizzes 
 
 - **Topic Validation** - AI validates topics before course generation
 - **Course Generation** - Automatic chapter breakdown with AI
+- **Study from Files** - Upload PDF, DOCX, or TXT files to generate courses from your own materials
 - **Quiz Generation** - MCQ and True/False questions per chapter
 - **User Authentication** - JWT-based signup/login
 - **Progress Tracking** - Track answers, scores, and attempt counts with per-chapter progress display
@@ -120,6 +121,7 @@ curl http://localhost:8000/health
 
 ### Courses
 - `POST /api/v1/courses/generate` - Generate course from topic (auth required)
+- `POST /api/v1/courses/generate-from-files` - Generate course from uploaded files (PDF, DOCX, TXT)
 - `POST /api/v1/courses/validate` - Validate topic before generation
 - `GET /api/v1/courses/my-courses` - Get user's created courses
 - `GET /api/v1/courses/{id}` - Get course by ID
@@ -147,7 +149,7 @@ curl http://localhost:8000/health
 - [x] User authentication (JWT)
 - [x] Course management (CRUD)
 - [x] Auto-enrollment on generation
-- [ ] PDF processing service
+- [x] File upload processing (PDF, DOCX, TXT)
 - [ ] AI mentor feedback
 - [ ] RAG system for contextual help  (https://github.com/yichuan-w/LEANN)
 - [ ] Gemini AI provider

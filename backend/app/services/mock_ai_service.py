@@ -198,11 +198,15 @@ class MockAIService(BaseAIService):
         Args:
             topic: The subject/topic for the course
             config: CourseConfig with chapter count, difficulty, depth, and time settings
-            content: Optional document content (ignored in mock)
+            content: Optional document content for content-based generation
 
         Returns:
             List of Chapter objects
         """
+        # If content is provided, use content-based generation
+        if content and len(content) > 500:
+            return self._generate_from_content(topic, config, content)
+
         normalized_topic = topic.lower().strip()
         num_chapters = config.recommended_chapters
         difficulty = config.difficulty
@@ -263,6 +267,117 @@ class MockAIService(BaseAIService):
                 "estimated_time_minutes": time_per_chapter
             }
             chapters.append(Chapter(**chapter_data))
+
+        return chapters
+
+    def _generate_from_content(
+        self,
+        topic: str,
+        config: CourseConfig,
+        content: str
+    ) -> List[Chapter]:
+        """
+        Generate chapters based on provided document content.
+
+        Splits content into logical sections and creates chapters from them.
+        """
+        import re
+
+        num_chapters = config.recommended_chapters
+        difficulty = config.difficulty
+        time_per_chapter = config.time_per_chapter_minutes
+
+        # Try to split content by common section markers
+        # Look for patterns like "Chapter", "Section", "Part", numbered headings, or markdown headers
+        section_patterns = [
+            r'\n(?:Chapter|Section|Part)\s+\d+[:\.\s]',
+            r'\n#{1,3}\s+',  # Markdown headers
+            r'\n\d+\.\s+[A-Z]',  # Numbered sections
+            r'\n[A-Z][A-Z\s]{5,50}\n',  # ALL CAPS HEADERS
+        ]
+
+        sections = [content]
+        for pattern in section_patterns:
+            if len(sections) < num_chapters:
+                new_sections = []
+                for section in sections:
+                    parts = re.split(pattern, section)
+                    new_sections.extend([p.strip() for p in parts if p.strip() and len(p.strip()) > 100])
+                if len(new_sections) > len(sections):
+                    sections = new_sections
+
+        # If we couldn't find good sections, split by paragraph chunks
+        if len(sections) < num_chapters:
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip() and len(p.strip()) > 50]
+            if len(paragraphs) >= num_chapters:
+                # Group paragraphs into chunks
+                chunk_size = max(1, len(paragraphs) // num_chapters)
+                sections = []
+                for i in range(0, len(paragraphs), chunk_size):
+                    chunk = '\n\n'.join(paragraphs[i:i + chunk_size])
+                    if chunk:
+                        sections.append(chunk)
+
+        # Limit to num_chapters
+        sections = sections[:num_chapters]
+
+        # Ensure we have at least 1 section
+        if not sections:
+            sections = [content[:2000]]
+
+        chapters = []
+        for i, section in enumerate(sections):
+            # Extract title from first line or generate one
+            lines = section.split('\n')
+            first_line = lines[0].strip()[:80] if lines else f"Section {i + 1}"
+
+            # Clean up title
+            title = first_line.strip('=').strip('#').strip(':').strip()
+            if not title or len(title) < 3:
+                title = f"Chapter {i + 1}: Study Material"
+
+            # Extract key concepts (simple word extraction)
+            words = section.split()
+            # Find capitalized words that might be concepts
+            potential_concepts = []
+            for word in words[:200]:
+                clean_word = word.strip('.,;:!?()[]"\'')
+                if clean_word and clean_word[0].isupper() and len(clean_word) > 3:
+                    if clean_word not in potential_concepts:
+                        potential_concepts.append(clean_word)
+            key_concepts = potential_concepts[:4] if potential_concepts else ["Key concepts", "Main ideas", "Core principles"]
+
+            # Generate summary from first 200 chars of section
+            summary_text = section[:200].replace('\n', ' ').strip()
+            if len(section) > 200:
+                summary_text += "..."
+
+            # Key ideas (extract sentences that look important)
+            sentences = section.split('.')
+            key_ideas = []
+            for sent in sentences[:10]:
+                sent = sent.strip()
+                if len(sent) > 30 and len(sent) < 200:
+                    key_ideas.append(sent[:150])
+                    if len(key_ideas) >= 3:
+                        break
+
+            # Source excerpt
+            source_excerpt = section[:300].replace('\n', ' ').strip()
+            if len(section) > 300:
+                source_excerpt += "..."
+
+            chapter = Chapter(
+                number=i + 1,
+                title=title,
+                summary=summary_text,
+                key_concepts=key_concepts,
+                key_ideas=key_ideas if key_ideas else None,
+                difficulty=difficulty,
+                estimated_time_minutes=time_per_chapter,
+                source_excerpt=source_excerpt
+            )
+            chapters.append(chapter)
 
         return chapters
 

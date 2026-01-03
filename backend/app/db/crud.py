@@ -196,6 +196,59 @@ async def save_course_for_user(
     return str(result.inserted_id)
 
 
+async def save_course_from_files(
+    user_id: str,
+    topic: str,
+    difficulty: str,
+    complexity_score: Optional[int],
+    category: Optional[str],
+    chapters: List[Chapter],
+    provider: str,
+    source_files: List[Dict[str, Any]]
+) -> Optional[str]:
+    """
+    Save a course generated from uploaded files.
+
+    Args:
+        user_id: The user's ID
+        topic: The course topic (provided or inferred)
+        difficulty: Difficulty level
+        complexity_score: Topic complexity score
+        category: Topic category
+        chapters: List of Chapter objects
+        provider: AI provider used
+        source_files: List of file metadata dicts
+
+    Returns:
+        Inserted document ID as string, or None if DB not connected
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return None
+
+    # Convert chapters to dicts
+    chapters_data = [chapter.model_dump() for chapter in chapters]
+
+    document = {
+        "user_id": user_id,
+        "topic": topic.lower().strip(),
+        "original_topic": topic,
+        "difficulty": difficulty,
+        "complexity_score": complexity_score,
+        "category": category,
+        "chapters": chapters_data,
+        "total_chapters": len(chapters),
+        "provider": provider,
+        "source_type": "files",
+        "source_files": source_files,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+
+    result = await db[COURSES_COLLECTION].insert_one(document)
+    return str(result.inserted_id)
+
+
 async def get_courses_by_user(user_id: str) -> List[Dict[str, Any]]:
     """
     Get all courses for a user, ordered by created_at descending.

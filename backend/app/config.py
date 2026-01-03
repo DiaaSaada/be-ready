@@ -3,7 +3,7 @@ Application configuration management using Pydantic Settings.
 Loads environment variables from .env file.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 
 
@@ -73,8 +73,11 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # File Upload
-    max_upload_size: int = 10485760  # 10MB
+    max_upload_size: int = 10485760  # 10MB per file
     upload_dir: str = "./uploads"
+    max_upload_files: int = 5  # Max files per request
+    allowed_extensions: List[str] = [".pdf", ".docx", ".txt"]
+    min_content_chars: int = 500  # Minimum extracted content length
     
     # AI Provider Selection (for A/B testing)
     # Options: "claude", "openai", "mock"

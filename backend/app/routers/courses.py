@@ -2,11 +2,16 @@
 Courses API Router
 Handles all course-related endpoints with configurable AI providers.
 """
-from fastapi import APIRouter, HTTPException, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File, Form
 from typing import Optional, List
+from pathlib import Path
+import uuid
+import os
 from app.models.course import (
     GenerateCourseRequest,
     GenerateCourseResponse,
+    GenerateFromFilesResponse,
+    FileUploadResult,
     Chapter,
     CourseConfig
 )
@@ -17,7 +22,8 @@ from app.dependencies.auth import get_current_user
 from app.services.ai_service_factory import AIServiceFactory
 from app.services.topic_validator import get_topic_validator
 from app.services.course_configurator import get_course_configurator
-from app.config import UseCase
+from app.services.file_parser import get_file_parser
+from app.config import UseCase, settings
 from app.db import crud, user_repository
 
 # Create router
@@ -223,6 +229,215 @@ async def validate_topic(
 async def validate_topic_alias(request: GenerateCourseRequest):
     """Alias for /validate endpoint for backwards compatibility."""
     return await validate_topic(request)
+
+
+@router.post(
+    "/generate-from-files",
+    response_model=GenerateFromFilesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate course from uploaded files",
+    description="Upload PDF, DOCX, or TXT files to generate a course based on their content."
+)
+async def generate_course_from_files(
+    files: List[UploadFile] = File(..., description="Files to process (PDF, DOCX, TXT)"),
+    topic: Optional[str] = Form(default=None, description="Optional course title"),
+    difficulty: str = Form(default="intermediate", description="Difficulty level"),
+    provider: Optional[str] = Query(default=None, description="AI provider override"),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """
+    Generate a course with chapters based on uploaded file content.
+
+    Flow:
+    1. Validate file count and types
+    2. Save files temporarily and parse content
+    3. Infer topic from content if not provided
+    4. Generate chapters using AI with content context
+    5. Store course with source metadata
+    6. Clean up temporary files
+    """
+    # Validate file count
+    if len(files) > settings.max_upload_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {settings.max_upload_files} files allowed"
+        )
+
+    if len(files) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required"
+        )
+
+    # Validate file extensions
+    for file in files:
+        ext = Path(file.filename).suffix.lower()
+        if ext not in settings.allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{file.filename}' has unsupported type. Allowed: {settings.allowed_extensions}"
+            )
+
+    # Check file sizes and read content
+    file_contents = []
+    for file in files:
+        content = await file.read()
+        if len(content) > settings.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{file.filename}' exceeds maximum size of {settings.max_upload_size // (1024*1024)}MB"
+            )
+        file_contents.append((file.filename, content))
+        await file.seek(0)
+
+    # Save files temporarily and parse
+    temp_dir = Path(settings.upload_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    temp_files = []
+    file_paths = []
+
+    try:
+        # Save uploaded files temporarily
+        for filename, content in file_contents:
+            temp_path = temp_dir / f"{uuid.uuid4()}_{filename}"
+            with open(temp_path, 'wb') as f:
+                f.write(content)
+            temp_files.append(temp_path)
+            file_paths.append(temp_path)
+
+        # Parse all files
+        parser = get_file_parser()
+        parse_result = await parser.parse_files(file_paths)
+
+        # Check if we have enough content
+        if parse_result.total_chars < settings.min_content_chars:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Extracted content is too short ({parse_result.total_chars} chars). "
+                       f"Minimum {settings.min_content_chars} chars required."
+            )
+
+        # If all files failed, return error
+        if parse_result.successful_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "all_files_failed",
+                    "message": "Could not extract content from any uploaded file",
+                    "errors": parse_result.errors
+                }
+            )
+
+        # Infer topic from content if not provided
+        inferred_topic = topic.strip() if topic and topic.strip() else None
+        if not inferred_topic:
+            # Use first 100 chars of content as topic, or first line
+            first_content = parse_result.combined_content[:500]
+            lines = first_content.split('\n')
+            # Find first non-empty, non-header line
+            for line in lines:
+                clean_line = line.strip().strip('=').strip()
+                if clean_line and not clean_line.startswith('Content from:'):
+                    inferred_topic = clean_line[:100]
+                    break
+            if not inferred_topic:
+                inferred_topic = "Study Guide from Uploaded Files"
+
+        # Get course configuration (use default complexity 5 for file-based)
+        configurator = get_course_configurator()
+        config = configurator.get_config(
+            complexity_score=5,
+            difficulty=difficulty
+        )
+
+        # Adjust chapters for small content
+        if parse_result.total_chars < 2000:
+            config.recommended_chapters = max(1, config.recommended_chapters // 2)
+
+        # Generate chapters with content
+        ai_service = AIServiceFactory.get_service(
+            use_case=UseCase.CHAPTER_GENERATION,
+            provider_override=provider
+        )
+
+        chapters = await ai_service.generate_chapters(
+            topic=inferred_topic,
+            config=config,
+            content=parse_result.combined_content
+        )
+
+        actual_provider = ai_service.get_provider_name()
+
+        # Prepare source file metadata
+        source_files_meta = [
+            {
+                "filename": f.filename,
+                "file_type": f.file_type,
+                "char_count": f.char_count,
+                "success": f.success,
+                "error": f.error
+            }
+            for f in parse_result.files
+        ]
+
+        # Save course
+        course_id = await crud.save_course_from_files(
+            user_id=current_user.id,
+            topic=inferred_topic,
+            difficulty=difficulty,
+            complexity_score=5,
+            category=None,
+            chapters=chapters,
+            provider=actual_provider,
+            source_files=source_files_meta
+        )
+
+        # Auto-enroll user
+        if course_id:
+            await user_repository.enroll_user_in_course(current_user.id, course_id)
+
+        # Build response
+        file_results = [
+            FileUploadResult(
+                filename=f.filename,
+                file_type=f.file_type,
+                char_count=f.char_count,
+                success=f.success,
+                error=f.error
+            )
+            for f in parse_result.files
+        ]
+
+        return GenerateFromFilesResponse(
+            id=course_id,
+            topic=inferred_topic,
+            difficulty=difficulty,
+            total_chapters=len(chapters),
+            estimated_study_hours=config.estimated_study_hours,
+            time_per_chapter_minutes=config.time_per_chapter_minutes,
+            complexity_score=5,
+            chapters=chapters,
+            message=f"Generated {len(chapters)} chapters from {parse_result.successful_count} file(s)",
+            source_files=file_results,
+            extracted_text_chars=parse_result.total_chars,
+            config=config
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate course from files: {str(e)}"
+        )
+    finally:
+        # Cleanup temporary files
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass
 
 
 @router.get(

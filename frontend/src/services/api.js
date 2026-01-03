@@ -58,6 +58,30 @@ export const courseAPI = {
     const response = await api.get('/api/v1/courses/config-presets');
     return response.data;
   },
+
+  // Generate course from uploaded files
+  generateFromFiles: async (files, topic = null, difficulty = 'intermediate') => {
+    const formData = new FormData();
+
+    // Append each file
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    // Append form fields
+    if (topic) {
+      formData.append('topic', topic);
+    }
+    formData.append('difficulty', difficulty);
+
+    const response = await api.post('/api/v1/courses/generate-from-files', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000, // 2 minute timeout for file processing
+    });
+    return response.data;
+  },
 };
 
 // Question endpoints
