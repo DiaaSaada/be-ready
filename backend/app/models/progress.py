@@ -66,6 +66,9 @@ class ProgressResponse(BaseModel):
     completed: bool
     completed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    attempt_count: int = Field(default=1, description="Number of quiz attempts")
+    best_score: float = Field(default=0.0, ge=0, le=1, description="Best score achieved")
+    best_score_percent: int = Field(default=0, ge=0, le=100, description="Best score as percentage")
 
 
 class ProgressListResponse(BaseModel):

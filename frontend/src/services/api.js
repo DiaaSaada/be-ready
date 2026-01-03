@@ -108,10 +108,10 @@ export const progressAPI = {
     return response.data;
   },
 
-  // Get progress for a specific course
-  getCourse: async (userId, topic) => {
+  // Get progress for a specific course (by topic and difficulty)
+  getCourse: async (userId, topic, difficulty) => {
     const response = await api.get(`/api/v1/progress/${userId}`, {
-      params: { topic },
+      params: { topic: topic.toLowerCase(), difficulty },
     });
     return response.data;
   },
