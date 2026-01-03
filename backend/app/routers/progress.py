@@ -52,34 +52,66 @@ async def submit_quiz_results(request: SubmitQuizRequest):
         # Prepare answers for storage
         answers_data = [answer.model_dump() for answer in request.answers]
 
-        # Document to save
-        document = {
+        # Filter for finding existing record
+        filter_query = {
             "user_id": request.user_id,
             "course_topic": normalized_topic,
             "difficulty": request.difficulty,
-            "chapter_number": request.chapter_number,
-            "chapter_title": request.chapter_title,
-            "answers": answers_data,
-            "score": score,
-            "total_questions": request.total_questions,
-            "correct_answers": request.correct_count,
-            "completed": True,
-            "started_at": now,
-            "completed_at": now,
-            "updated_at": now
+            "chapter_number": request.chapter_number
         }
 
-        # Upsert - replace if exists, insert if not
-        result = await db[PROGRESS_COLLECTION].replace_one(
-            {
+        # Check if record exists
+        existing = await db[PROGRESS_COLLECTION].find_one(filter_query)
+
+        if existing:
+            # Update existing record - increment attempt_count
+            update_data = {
+                "$inc": {"attempt_count": 1},
+                "$set": {
+                    "answers": answers_data,
+                    "score": score,
+                    "total_questions": request.total_questions,
+                    "correct_answers": request.correct_count,
+                    "completed": True,
+                    "completed_at": now,
+                    "updated_at": now,
+                    "chapter_title": request.chapter_title,
+                }
+            }
+            # Update best_score only if new score is higher
+            if score > existing.get("best_score", 0):
+                update_data["$set"]["best_score"] = score
+
+            await db[PROGRESS_COLLECTION].update_one(filter_query, update_data)
+
+            # Calculate response values
+            new_attempt_count = existing.get("attempt_count", 1) + 1
+            best_score = max(score, existing.get("best_score", 0))
+            created_at = existing.get("started_at", now)
+        else:
+            # Insert new document
+            document = {
                 "user_id": request.user_id,
                 "course_topic": normalized_topic,
                 "difficulty": request.difficulty,
-                "chapter_number": request.chapter_number
-            },
-            document,
-            upsert=True
-        )
+                "chapter_number": request.chapter_number,
+                "chapter_title": request.chapter_title,
+                "answers": answers_data,
+                "score": score,
+                "best_score": score,
+                "attempt_count": 1,
+                "total_questions": request.total_questions,
+                "correct_answers": request.correct_count,
+                "completed": True,
+                "started_at": now,
+                "completed_at": now,
+                "updated_at": now
+            }
+            await db[PROGRESS_COLLECTION].insert_one(document)
+
+            new_attempt_count = 1
+            best_score = score
+            created_at = now
 
         return ProgressResponse(
             user_id=request.user_id,
@@ -93,7 +125,10 @@ async def submit_quiz_results(request: SubmitQuizRequest):
             total_questions=request.total_questions,
             completed=True,
             completed_at=now,
-            created_at=now
+            created_at=created_at,
+            attempt_count=new_attempt_count,
+            best_score=best_score,
+            best_score_percent=int(best_score * 100)
         )
 
     except HTTPException:
@@ -144,6 +179,8 @@ async def get_user_progress(
         # Convert to response models
         progress_list = []
         for record in records:
+            # Get best_score, fallback to score for backward compatibility
+            best_score = record.get("best_score", record.get("score", 0.0))
             progress_list.append(ProgressResponse(
                 user_id=record["user_id"],
                 course_topic=record["course_topic"],
@@ -156,7 +193,10 @@ async def get_user_progress(
                 total_questions=record.get("total_questions", 0),
                 completed=record.get("completed", False),
                 completed_at=record.get("completed_at"),
-                created_at=record.get("started_at")
+                created_at=record.get("started_at"),
+                attempt_count=record.get("attempt_count", 1),
+                best_score=best_score,
+                best_score_percent=int(best_score * 100)
             ))
 
         return ProgressListResponse(

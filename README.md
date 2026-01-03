@@ -8,7 +8,7 @@ An AI-powered learning platform that generates personalized courses and quizzes 
 - **Course Generation** - Automatic chapter breakdown with AI
 - **Quiz Generation** - MCQ and True/False questions per chapter
 - **User Authentication** - JWT-based signup/login
-- **Progress Tracking** - Track answers and scores
+- **Progress Tracking** - Track answers, scores, and attempt counts with per-chapter progress display
 - **Course Management** - Create, view, delete user courses
 - **Auto-enrollment** - Users auto-enrolled in generated courses
 - **Multi-Provider** - Supports Claude, OpenAI, and Mock providers
