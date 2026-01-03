@@ -85,6 +85,7 @@ class GenerateCourseResponse(BaseModel):
     id: Optional[str] = Field(default=None, description="Course ID (MongoDB ObjectId)")
     topic: str = Field(..., description="The topic of the course")
     difficulty: str = Field(..., description="Course difficulty level")
+    category: Optional[str] = Field(default=None, description="Topic category (official_certification, college_course, high_school, etc.)")
     total_chapters: int = Field(..., description="Total number of chapters")
     estimated_study_hours: float = Field(..., description="Total estimated study hours")
     time_per_chapter_minutes: int = Field(..., description="Average time per chapter in minutes")
