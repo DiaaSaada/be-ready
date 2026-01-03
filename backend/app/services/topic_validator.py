@@ -6,7 +6,7 @@ Uses quick pattern matching and AI-based validation.
 import json
 import re
 from typing import Optional
-from app.models.validation import TopicValidationResult, TopicComplexity
+from app.models.validation import TopicValidationResult, TopicComplexity, TopicCategory
 from app.config import settings
 from app.utils.llm_logger import llm_logger
 
@@ -257,6 +257,7 @@ Evaluate and respond with ONLY valid JSON (no additional text):
   "is_valid": true/false,
   "is_certification": true/false,
   "certification_body": "Name of certifying organization if applicable, null otherwise",
+  "category": "official_certification" or "college_course" or "high_school" or "middle_school" or "elementary_school" or "general_knowledge",
   "reason": null or "too_broad" or "too_narrow" or "unclear" or "inappropriate",
   "message": "Brief explanation of your assessment",
   "suggestions": ["suggestion1", "suggestion2", "suggestion3"],
@@ -269,7 +270,15 @@ Evaluate and respond with ONLY valid JSON (no additional text):
   }}
 }}
 
-Guidelines:
+Category Guidelines:
+- "official_certification": Professional certifications (AWS, PMP, CISSP, CPA, CAPM, CompTIA, etc.)
+- "college_course": University/college level academic subjects (calculus, organic chemistry, etc.)
+- "high_school": High school curriculum topics (grades 9-12, AP courses, SAT prep)
+- "middle_school": Middle school curriculum topics (grades 6-8)
+- "elementary_school": Elementary school topics (grades 1-5, basic math, reading)
+- "general_knowledge": Hobbies, skills, general interest topics (photography, cooking, guitar)
+
+Validation Guidelines:
 - A valid topic can be covered in 4-20 chapters (a single focused course)
 - Certifications are ALWAYS valid - they have official curricula
 - "too_broad" = would need multiple courses (e.g., "Computer Science")
@@ -327,7 +336,8 @@ Guidelines:
                         estimated_chapters=6,
                         estimated_hours=10.0,
                         reasoning="Mock validation"
-                    )
+                    ),
+                    category=TopicCategory.GENERAL_KNOWLEDGE
                 )
 
             llm_logger.log_response(start_time, "Topic Validation")
@@ -360,6 +370,14 @@ Guidelines:
             else:
                 status = "rejected"
 
+            # Parse category
+            category = None
+            if data.get("category"):
+                try:
+                    category = TopicCategory(data["category"])
+                except ValueError:
+                    category = TopicCategory.GENERAL_KNOWLEDGE
+
             return TopicValidationResult(
                 status=status,
                 topic=topic,
@@ -369,7 +387,8 @@ Guidelines:
                 suggestions=data.get("suggestions", []),
                 complexity=complexity,
                 is_certification=data.get("is_certification", False),
-                certification_body=data.get("certification_body")
+                certification_body=data.get("certification_body"),
+                category=category
             )
 
         except Exception as e:

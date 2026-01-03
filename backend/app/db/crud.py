@@ -152,6 +152,7 @@ async def save_course_for_user(
     topic: str,
     difficulty: str,
     complexity_score: Optional[int],
+    category: Optional[str],
     chapters: List[Chapter],
     provider: str
 ) -> Optional[str]:
@@ -163,6 +164,7 @@ async def save_course_for_user(
         topic: The course topic
         difficulty: Difficulty level
         complexity_score: Topic complexity score
+        category: Topic category (official_certification, college_course, etc.)
         chapters: List of Chapter objects
         provider: AI provider used
 
@@ -182,6 +184,7 @@ async def save_course_for_user(
         "original_topic": topic,
         "difficulty": difficulty,
         "complexity_score": complexity_score,
+        "category": category,
         "chapters": chapters_data,
         "total_chapters": len(chapters),
         "provider": provider,

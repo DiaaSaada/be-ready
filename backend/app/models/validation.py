@@ -3,6 +3,17 @@ Pydantic models for topic validation.
 """
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
+from enum import Enum
+
+
+class TopicCategory(str, Enum):
+    """Category of topic for determining generation approach."""
+    OFFICIAL_CERTIFICATION = "official_certification"  # AWS, PMP, CISSP, CPA, etc.
+    COLLEGE_COURSE = "college_course"                  # University-level academic
+    HIGH_SCHOOL = "high_school"                        # Grades 9-12
+    MIDDLE_SCHOOL = "middle_school"                    # Grades 6-8
+    ELEMENTARY_SCHOOL = "elementary_school"            # Grades 1-5
+    GENERAL_KNOWLEDGE = "general_knowledge"            # General interest, hobbies, skills
 
 
 class TopicComplexity(BaseModel):
@@ -56,6 +67,10 @@ class TopicValidationResult(BaseModel):
     certification_body: Optional[str] = Field(
         default=None,
         description="Name of the certifying organization (e.g., PMI, AWS, CompTIA)"
+    )
+    category: Optional[TopicCategory] = Field(
+        default=None,
+        description="Category of topic (certification, college, high school, etc.)"
     )
 
     class Config:

@@ -70,6 +70,7 @@ async def generate_course(
             )
 
         complexity_score = None
+        category = None
 
         # Step 1: Validate topic (unless skipped for testing)
         if not request.skip_validation:
@@ -98,9 +99,11 @@ async def generate_course(
                     }
                 )
 
-            # Extract complexity score from validation
+            # Extract complexity score and category from validation
             if validation_result.complexity:
                 complexity_score = validation_result.complexity.score
+            if validation_result.category:
+                category = validation_result.category.value
 
         # Step 2: Get optimal course configuration
         configurator = get_course_configurator()
@@ -131,6 +134,7 @@ async def generate_course(
             topic=request.topic,
             difficulty=request.difficulty,
             complexity_score=complexity_score,
+            category=category,
             chapters=chapters,
             provider=actual_provider
         )
@@ -143,6 +147,7 @@ async def generate_course(
             id=course_id,
             topic=request.topic,
             difficulty=request.difficulty,
+            category=category,
             total_chapters=len(chapters),
             estimated_study_hours=config.estimated_study_hours,
             time_per_chapter_minutes=config.time_per_chapter_minutes,
@@ -366,6 +371,7 @@ async def get_course(
         id=course.get("id"),
         topic=course.get("original_topic", course.get("topic", "")),
         difficulty=course.get("difficulty", "intermediate"),
+        category=course.get("category"),
         total_chapters=len(chapters),
         estimated_study_hours=0,  # Not stored in DB
         time_per_chapter_minutes=0,  # Not stored in DB
