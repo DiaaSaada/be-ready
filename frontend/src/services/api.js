@@ -137,6 +137,14 @@ export const questionAPI = {
     });
     return response.data;
   },
+
+  // Get question counts for all chapters of a course
+  getCounts: async (topic, difficulty) => {
+    const response = await api.get('/api/v1/questions/counts', {
+      params: { topic, difficulty },
+    });
+    return response.data;
+  },
 };
 
 // Progress endpoints

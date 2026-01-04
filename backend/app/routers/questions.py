@@ -490,6 +490,36 @@ async def get_sample_questions(
 
 
 @router.get(
+    "/counts",
+    response_model=dict,
+    summary="Get question counts for all chapters",
+    description="Returns the number of questions generated for each chapter of a course."
+)
+async def get_question_counts(
+    topic: str = Query(..., description="Course topic"),
+    difficulty: Literal["beginner", "intermediate", "advanced"] = Query(
+        ..., description="Course difficulty level"
+    )
+):
+    """
+    Get question counts for all chapters of a course.
+
+    Returns a dictionary mapping chapter numbers to question counts.
+    Only chapters that have generated questions will be included.
+
+    Args:
+        topic: Course topic
+        difficulty: Difficulty level
+
+    Returns:
+        Dictionary with counts: { "1": 13, "2": 15, ... }
+    """
+    counts = await crud.get_question_counts_for_course(topic, difficulty)
+    # Convert int keys to string for JSON compatibility
+    return {"counts": {str(k): v for k, v in counts.items()}}
+
+
+@router.get(
     "/config",
     response_model=dict,
     summary="Get question generation configuration",

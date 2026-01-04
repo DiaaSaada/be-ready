@@ -411,6 +411,43 @@ async def get_questions(
     return questions
 
 
+async def get_question_counts_for_course(
+    course_topic: str,
+    difficulty: str
+) -> Dict[int, int]:
+    """
+    Get question counts for all chapters of a course.
+
+    Args:
+        course_topic: The course topic
+        difficulty: Course difficulty level
+
+    Returns:
+        Dictionary mapping chapter_number to total question count
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return {}
+
+    normalized_topic = course_topic.lower().strip()
+
+    # Find all question documents for this course
+    cursor = db[QUESTIONS_COLLECTION].find({
+        "course_topic": normalized_topic,
+        "difficulty": difficulty
+    })
+
+    counts = {}
+    async for doc in cursor:
+        chapter_num = doc.get("chapter_number")
+        if chapter_num is not None:
+            mcq_count = len(doc.get("mcq", []))
+            tf_count = len(doc.get("true_false", []))
+            counts[chapter_num] = mcq_count + tf_count
+
+    return counts
+
+
 # Collection for incremental question batches
 QUESTION_BATCHES_COLLECTION = "question_batches"
 

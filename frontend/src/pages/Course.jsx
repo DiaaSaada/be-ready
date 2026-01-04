@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { courseAPI, progressAPI } from '../services/api';
+import { courseAPI, progressAPI, questionAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 function Course() {
@@ -10,6 +10,7 @@ function Course() {
   const { user } = useAuth();
   const [course, setCourse] = useState(null);
   const [progress, setProgress] = useState({}); // Map: chapterNumber -> progressData
+  const [questionCounts, setQuestionCounts] = useState({}); // Map: chapterNumber -> count
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -20,23 +21,35 @@ function Course() {
         const data = await courseAPI.getById(courseId);
         setCourse(data);
 
-        // Fetch progress for this course
-        if (user?.id && data?.topic && data?.difficulty) {
+        // Fetch progress and question counts for this course
+        if (data?.topic && data?.difficulty) {
+          // Fetch progress
+          if (user?.id) {
+            try {
+              const progressData = await progressAPI.getCourse(
+                user.id,
+                data.topic,
+                data.difficulty
+              );
+              // Convert array to map by chapter_number
+              const progressMap = {};
+              (progressData.progress || []).forEach((p) => {
+                progressMap[p.chapter_number] = p;
+              });
+              setProgress(progressMap);
+            } catch (progressErr) {
+              // Progress fetch failure is not critical - just log it
+              console.warn('Failed to fetch progress:', progressErr);
+            }
+          }
+
+          // Fetch question counts
           try {
-            const progressData = await progressAPI.getCourse(
-              user.id,
-              data.topic,
-              data.difficulty
-            );
-            // Convert array to map by chapter_number
-            const progressMap = {};
-            (progressData.progress || []).forEach((p) => {
-              progressMap[p.chapter_number] = p;
-            });
-            setProgress(progressMap);
-          } catch (progressErr) {
-            // Progress fetch failure is not critical - just log it
-            console.warn('Failed to fetch progress:', progressErr);
+            const countsData = await questionAPI.getCounts(data.topic, data.difficulty);
+            setQuestionCounts(countsData.counts || {});
+          } catch (countsErr) {
+            // Question counts fetch failure is not critical - just log it
+            console.warn('Failed to fetch question counts:', countsErr);
           }
         }
       } catch (err) {
@@ -218,13 +231,19 @@ function Course() {
                       </div>
                     )}
 
-                    {/* Time Estimate & Quiz Button */}
+                    {/* Time Estimate, Question Count & Quiz Button */}
                     <div className="flex items-center justify-between mt-3">
-                      {chapter.estimated_time_minutes && (
-                        <p className="text-xs text-gray-400">
-                          ⏱ {chapter.estimated_time_minutes} min
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-400">
+                        {chapter.estimated_time_minutes && (
+                          <span>⏱ {chapter.estimated_time_minutes} min</span>
+                        )}
+                        {questionCounts[chapterNum] && (
+                          <span>
+                            {chapter.estimated_time_minutes && ' • '}
+                            📝 {questionCounts[chapterNum]} questions
+                          </span>
+                        )}
+                      </p>
                       <button
                         onClick={() => handleStartQuiz(chapter)}
                         className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
