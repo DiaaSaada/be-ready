@@ -160,6 +160,12 @@ curl http://localhost:8000/health
 - [ ] RAG system for contextual help (https://github.com/yichuan-w/LEANN)
 - [ ] Chapter verification with secondary LLM
 - [ ] Improve the topic title before generation
+- [ ] Async job queue with RabbitMQ for chapter/question generation
+- [ ] Prometheus + Grafana for metrics & dashboards (server health, API performance)
+- [ ] Rate limiting
+- [ ] Notifications ("Time to study!" reminders, quick tips to keep users engaged)
+- [ ] Human feedback (thumbs up/down to improve over time)
+- [ ] GitHub Actions (CI/CD pipeline)
 
 ### Future Features
 
