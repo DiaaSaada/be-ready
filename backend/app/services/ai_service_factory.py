@@ -59,21 +59,25 @@ class AIServiceFactory:
             model = model_override
         else:
             model = settings.get_model_for_use_case(use_case)
-        
+
         # Determine which provider to use
         if provider_override:
             provider = provider_override.lower()
         else:
             provider = settings.get_provider_for_model(model)
-        
+
         # Create cache key
         cache_key = f"{provider}:{model}"
-        
+
+        print(f"[FACTORY] get_service called - use_case={use_case}, provider={provider}, model={model}, cache_key={cache_key}")
+
         # Return cached instance if available
         if cache_key in cls._instances:
+            print(f"[FACTORY] Returning CACHED {provider} service")
             return cls._instances[cache_key]
-        
+
         # Create new service instance
+        print(f"[FACTORY] Creating NEW {provider} service instance")
         if provider == "mock":
             service = MockAIService()
         elif provider == "claude":
@@ -84,10 +88,11 @@ class AIServiceFactory:
             service = GeminiAIService(model=model)
         else:
             raise ValueError(f"Unknown AI provider: {provider}")
-        
+
         # Cache the instance
         cls._instances[cache_key] = service
-        
+
+        print(f"[FACTORY] Returning {provider} service with model {model}")
         return service
     
     @classmethod

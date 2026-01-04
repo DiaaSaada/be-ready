@@ -84,11 +84,12 @@ async def generate_course(
 
         complexity_score = None
         category = None
-
+        print( "user_id", current_user.id)
         # Step 1: Validate topic (unless skipped for testing)
         if not request.skip_validation:
             validator = get_topic_validator()
-            validation_result = await validator.validate(request.topic)
+            print( "user_id", current_user.id)
+            validation_result = await validator.validate(request.topic, user_id=current_user.id)
 
             if validation_result.status == "rejected":
                 raise HTTPException(
@@ -117,7 +118,7 @@ async def generate_course(
                 complexity_score = validation_result.complexity.score
             if validation_result.category:
                 category = validation_result.category.value
-
+        print( "user_id2", current_user.id)
         # Step 2: Get optimal course configuration
         configurator = get_course_configurator()
         # Use complexity score from validation, default to 5 if not available
@@ -135,7 +136,9 @@ async def generate_course(
         # Generate chapters with configuration
         chapters = await ai_service.generate_chapters(
             topic=request.topic,
-            config=config
+            config=config,
+            user_id=current_user.id,
+            context=request.topic
         )
 
         # Determine which provider was actually used
@@ -197,7 +200,8 @@ async def generate_course(
     description="Checks if a topic is suitable for course generation. Returns validation status, suggestions, and complexity assessment."
 )
 async def validate_topic(
-    request: GenerateCourseRequest
+    request: GenerateCourseRequest,
+    current_user: UserInDB = Depends(get_current_user)
 ):
     """
     Validate a topic before generating a course.
@@ -221,8 +225,9 @@ async def validate_topic(
         {"topic": "Physics", "difficulty": "beginner"}
         -> {"status": "rejected", "reason": "too_broad", "suggestions": [...]}
     """
+    print("validate user id ", current_user.id )
     validator = get_topic_validator()
-    return await validator.validate(request.topic)
+    return await validator.validate(request.topic, current_user.id)
 
 
 @router.post(
@@ -368,10 +373,15 @@ async def generate_course_from_files(
             provider_override=provider
         )
 
+        # Build context from filenames
+        file_context = ", ".join([f.filename for f in parse_result.files if f.success])
+
         chapters = await ai_service.generate_chapters(
             topic=inferred_topic,
             config=config,
-            content=parse_result.combined_content
+            content=parse_result.combined_content,
+            user_id=current_user.id,
+            context=file_context or inferred_topic
         )
 
         actual_provider = ai_service.get_provider_name()
@@ -559,11 +569,20 @@ async def analyze_files_for_structure(
 
         successful_files = [f for f in parse_result.files if f.success and f.content.strip()]
 
+        # Build context from all filenames
+        all_filenames = ", ".join([f.filename for f in successful_files])
+
+        print(f"[ROUTER] About to analyze {len(successful_files)} files for user {current_user.id}")
+
         for parsed_file in successful_files:
+            print(f"[ROUTER] Calling analyze_document_structure for {parsed_file.filename}")
             file_outline = await ai_service.analyze_document_structure(
                 content=parsed_file.content,
-                max_sections=15
+                max_sections=15,
+                user_id=current_user.id,
+                context=parsed_file.filename
             )
+            print(f"[ROUTER] Finished analyzing {parsed_file.filename}")
 
             # Add source_file to each section and collect them
             for section in file_outline.sections:
@@ -714,11 +733,17 @@ async def generate_from_confirmed_outline(
             provider_override=provider
         )
 
+        # Build context from source files
+        source_files = analysis.get("source_files", [])
+        file_context = ", ".join([f.get("filename", "") for f in source_files if f.get("success")])
+
         chapters = await ai_service.generate_chapters_from_outline(
             topic=topic,
             content=analysis["raw_content"],
             confirmed_sections=request.confirmed_sections,
-            difficulty=request.difficulty
+            difficulty=request.difficulty,
+            user_id=current_user.id,
+            context=file_context or topic
         )
 
         actual_provider = ai_service.get_provider_name()

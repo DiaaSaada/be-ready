@@ -41,6 +41,11 @@ tags_metadata = [
         "description": "**Progress Tracking** - Track user quiz results and progress. "
                        "Save scores, view history, and get progress summaries.",
     },
+    {
+        "name": "tokens",
+        "description": "**Token Usage** - Track AI token consumption per user. "
+                       "View usage history and aggregated statistics by operation and provider.",
+    },
 ]
 
 
@@ -182,7 +187,7 @@ async def health_check():
 
 
 # Import routers
-from app.routers import auth, courses, questions, progress, my_courses
+from app.routers import auth, courses, questions, progress, my_courses, tokens
 
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
@@ -190,6 +195,7 @@ app.include_router(courses.router, prefix="/api/v1/courses", tags=["courses"])
 app.include_router(questions.router, prefix="/api/v1/questions", tags=["questions"])
 app.include_router(progress.router, prefix="/api/v1/progress", tags=["progress"])
 app.include_router(my_courses.router, prefix="/api/v1/my-courses", tags=["my-courses"])
+app.include_router(tokens.router, tags=["tokens"])
 
 
 if __name__ == "__main__":

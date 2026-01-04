@@ -3,7 +3,7 @@ Gemini AI Service
 Implementation using Google's Gemini API.
 Implements BaseAIService interface.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import uuid
 import google.generativeai as genai
@@ -16,6 +16,7 @@ from app.models.question import (
     TrueFalseQuestion,
     QuestionDifficulty,
 )
+from app.models.token_usage import OperationType
 from app.services.base_ai_service import BaseAIService
 from app.config import settings
 from app.utils.llm_logger import llm_logger
@@ -52,7 +53,9 @@ class GeminiAIService(BaseAIService):
         self,
         topic: str,
         config: CourseConfig,
-        content: str = ""
+        content: str = "",
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate chapters using Gemini AI.
@@ -61,6 +64,8 @@ class GeminiAIService(BaseAIService):
             topic: The subject/topic for the course
             config: CourseConfig with chapter count, difficulty, depth, and time settings
             content: Optional document content to analyze
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects
@@ -192,6 +197,22 @@ Return ONLY valid JSON:
         )
         llm_logger.log_response(start_time, "Chapter Generation")
 
+        # Log token usage - ALWAYS log, even if usage_metadata is missing
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+
+        await self.log_token_usage(
+            operation=OperationType.CHAPTER_GENERATION,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context or topic
+        )
+
         # Parse response
         response_text = response.text
 
@@ -282,13 +303,17 @@ Return ONLY valid JSON:
 
     async def generate_questions_from_config(
         self,
-        config: QuestionGenerationConfig
+        config: QuestionGenerationConfig,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> ChapterQuestions:
         """
         Generate quiz questions using full configuration.
 
         Args:
             config: QuestionGenerationConfig with all generation parameters
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             ChapterQuestions object with generated questions
@@ -357,6 +382,27 @@ Return ONLY valid JSON (no markdown, no extra text):
         )
         llm_logger.log_response(start_time, "Question Generation")
 
+        # Log token usage - ALWAYS log, even if usage_metadata is missing
+        print(f"[GEMINI] QUESTION_GENERATION response received")
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+        else:
+            print(f"[GEMINI] WARNING: No usage_metadata for QUESTION_GENERATION")
+
+        print(f"[GEMINI] About to call log_token_usage - user_id={user_id}, tokens={input_tokens}+{output_tokens}")
+        await self.log_token_usage(
+            operation=OperationType.QUESTION_GENERATION,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context or config.topic
+        )
+        print(f"[GEMINI] log_token_usage completed for QUESTION_GENERATION")
+
         # Parse response
         response_text = response.text
         json_text = self._parse_json_response(response_text)
@@ -403,7 +449,9 @@ Return ONLY valid JSON (no markdown, no extra text):
     async def generate_feedback(
         self,
         user_progress: Dict[str, Any],
-        weak_areas: List[str]
+        weak_areas: List[str],
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Generate personalized feedback using Gemini AI.
@@ -411,6 +459,8 @@ Return ONLY valid JSON (no markdown, no extra text):
         Args:
             user_progress: User's progress data
             weak_areas: Areas where student needs improvement
+            user_id: User ID for token usage logging
+            context: Context info for token logging
 
         Returns:
             Feedback message as string
@@ -440,13 +490,31 @@ Be supportive but honest. Keep it concise (3-4 paragraphs)."""
         )
         llm_logger.log_response(start_time, "Student Feedback")
 
+        # Log token usage - ALWAYS log
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+
+        await self.log_token_usage(
+            operation=OperationType.FEEDBACK_GENERATION,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context
+        )
+
         return response.text
 
     async def check_answer(
         self,
         question: str,
         user_answer: str,
-        correct_answer: str
+        correct_answer: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Check answer using Gemini AI.
@@ -455,6 +523,8 @@ Be supportive but honest. Keep it concise (3-4 paragraphs)."""
             question: The question text
             user_answer: User's answer
             correct_answer: The correct answer
+            user_id: User ID for token usage logging
+            context: Context info for token logging
 
         Returns:
             Dictionary with 'is_correct', 'explanation', 'score'
@@ -488,6 +558,22 @@ Return ONLY valid JSON:
         )
         llm_logger.log_response(start_time, "Answer Checking")
 
+        # Log token usage - ALWAYS log
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+
+        await self.log_token_usage(
+            operation=OperationType.ANSWER_CHECK,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context
+        )
+
         # Parse response
         response_text = response.text
         json_text = self._parse_json_response(response_text)
@@ -497,14 +583,18 @@ Return ONLY valid JSON:
     async def answer_question(
         self,
         question: str,
-        context: str
+        rag_context: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Answer student question using RAG context with Gemini AI.
 
         Args:
             question: Student's question
-            context: Relevant context from the material
+            rag_context: Relevant context from the material
+            user_id: User ID for token usage logging
+            context: Context info for token logging
 
         Returns:
             Answer as string
@@ -512,7 +602,7 @@ Return ONLY valid JSON:
         prompt = f"""You are a helpful tutor. Answer the student's question using the provided context.
 
 Context from the learning material:
-{context}
+{rag_context}
 
 Student's Question: {question}
 
@@ -529,12 +619,30 @@ Provide a clear, concise answer based on the context. If the context doesn't con
         )
         llm_logger.log_response(start_time, "RAG Query")
 
+        # Log token usage - ALWAYS log
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+
+        await self.log_token_usage(
+            operation=OperationType.RAG_ANSWER,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context
+        )
+
         return response.text
 
     async def analyze_document_structure(
         self,
         content: str,
-        max_sections: int = 15
+        max_sections: int = 15,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> DocumentOutline:
         """
         Analyze document content and detect natural sections using Gemini AI.
@@ -542,10 +650,13 @@ Provide a clear, concise answer based on the context. If the context doesn't con
         Args:
             content: Full extracted document text
             max_sections: Maximum number of sections to detect
+            user_id: User ID for token usage logging
+            context: Context info (filenames) for token logging
 
         Returns:
             DocumentOutline with detected structure
         """
+        print(f"[GEMINI] analyze_document_structure called - user_id={user_id}, context={context}")
         # Truncate content if too long
         analysis_content = content[:50000]
 
@@ -607,6 +718,30 @@ Return ONLY valid JSON (no markdown, no extra text):
         )
         llm_logger.log_response(start_time, "Document Analysis")
 
+        # Log token usage - ALWAYS log, even if usage_metadata is missing
+        print(f"[GEMINI] ANALYZE_DOCUMENT response received")
+        print(f"[GEMINI] Has usage_metadata: {hasattr(response, 'usage_metadata')}")
+
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            print(f"[GEMINI] usage_metadata: {response.usage_metadata}")
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+        else:
+            print(f"[GEMINI] WARNING: No usage_metadata available, logging with 0 tokens")
+
+        print(f"[GEMINI] About to call log_token_usage - user_id={user_id}, tokens={input_tokens}+{output_tokens}")
+        await self.log_token_usage(
+            operation=OperationType.ANALYZE_DOCUMENT,
+            model=settings.model_document_analysis,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context
+        )
+        print(f"[GEMINI] log_token_usage completed for ANALYZE_DOCUMENT")
+
         # Parse response
         response_text = response.text
         json_text = self._parse_json_response(response_text)
@@ -638,7 +773,9 @@ Return ONLY valid JSON (no markdown, no extra text):
         topic: str,
         content: str,
         confirmed_sections: List[ConfirmedSection],
-        difficulty: str
+        difficulty: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate detailed chapters based on user-confirmed outline using Gemini AI.
@@ -649,6 +786,8 @@ Return ONLY valid JSON (no markdown, no extra text):
             content: Full extracted document text
             confirmed_sections: User-confirmed sections
             difficulty: Course difficulty level
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects with key_ideas populated
@@ -672,7 +811,9 @@ Return ONLY valid JSON (no markdown, no extra text):
                 content=analysis_content,
                 sections=batch_sections,
                 difficulty=difficulty,
-                start_number=batch_start + 1
+                start_number=batch_start + 1,
+                user_id=user_id,
+                context=context
             )
             all_chapters.extend(batch_chapters)
 
@@ -684,7 +825,9 @@ Return ONLY valid JSON (no markdown, no extra text):
         content: str,
         sections: List[ConfirmedSection],
         difficulty: str,
-        start_number: int
+        start_number: int,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate a batch of chapters (max 5 at a time) to stay within token limits.
@@ -695,6 +838,8 @@ Return ONLY valid JSON (no markdown, no extra text):
             sections: Batch of sections to generate
             difficulty: Course difficulty level
             start_number: Starting chapter number for this batch
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects for this batch
@@ -768,6 +913,22 @@ Return ONLY valid JSON (no markdown, no extra text):
             generation_config=generation_config
         )
         llm_logger.log_response(start_time, f"Chapter Batch {start_number}-{end_number}")
+
+        # Log token usage - ALWAYS log
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
+
+        await self.log_token_usage(
+            operation=OperationType.CHAPTER_GENERATION,
+            model=self.default_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            user_id=user_id,
+            context=context or topic
+        )
 
         # Parse response
         response_text = response.text
