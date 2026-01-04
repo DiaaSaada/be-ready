@@ -6,7 +6,9 @@ Implements BaseAIService interface.
 import uuid
 import random
 from typing import List, Dict, Any
+import re
 from app.models.course import Chapter, CourseConfig
+from app.models.document_analysis import DocumentOutline, DetectedSection, ConfirmedSection
 from app.models.question import (
     QuestionGenerationConfig,
     ChapterQuestions,
@@ -603,6 +605,243 @@ You're making progress! Keep it up!"""
             Answer as string
         """
         return f"Based on the material, here's the answer to your question: {question}\n\n[Mock answer would be generated here using the provided context]"
+
+    async def analyze_document_structure(
+        self,
+        content: str,
+        max_sections: int = 15
+    ) -> DocumentOutline:
+        """
+        Analyze document content and detect natural sections.
+
+        Uses pattern matching to find section headers and boundaries.
+        """
+        # Try to extract document title from first meaningful line
+        lines = content.split('\n')
+        document_title = "Untitled Document"
+        for line in lines[:10]:
+            line = line.strip()
+            if line and len(line) > 5 and len(line) < 100:
+                document_title = line.strip('#').strip('=').strip(':').strip()
+                break
+
+        # Detect document type based on content patterns
+        content_lower = content.lower()
+        if 'chapter' in content_lower or 'textbook' in content_lower:
+            document_type = "textbook"
+        elif 'lecture' in content_lower or 'slide' in content_lower:
+            document_type = "lecture"
+        elif 'manual' in content_lower or 'guide' in content_lower:
+            document_type = "manual"
+        elif 'article' in content_lower or 'abstract' in content_lower:
+            document_type = "article"
+        else:
+            document_type = "notes"
+
+        # Section detection patterns
+        section_patterns = [
+            (r'\n(?:Chapter|CHAPTER)\s+(\d+)[:\.\s]+([^\n]+)', 0.95),
+            (r'\n(?:Section|SECTION)\s+(\d+)[:\.\s]+([^\n]+)', 0.9),
+            (r'\n(?:Part|PART)\s+(\d+)[:\.\s]+([^\n]+)', 0.9),
+            (r'\n#{1,3}\s+([^\n]+)', 0.85),  # Markdown headers
+            (r'\n(\d+)\.\s+([A-Z][^\n]{5,50})', 0.8),  # Numbered sections
+            (r'\n([A-Z][A-Z\s]{5,50})\n', 0.75),  # ALL CAPS HEADERS
+        ]
+
+        detected_sections = []
+        used_positions = set()
+
+        for pattern, confidence in section_patterns:
+            matches = list(re.finditer(pattern, content))
+            for match in matches:
+                pos = match.start()
+                # Skip if too close to an already detected section
+                if any(abs(pos - p) < 200 for p in used_positions):
+                    continue
+
+                # Extract title
+                groups = match.groups()
+                if len(groups) >= 2 and groups[1]:
+                    title = groups[1].strip()
+                elif len(groups) >= 1:
+                    title = groups[0].strip()
+                else:
+                    continue
+
+                # Clean title
+                title = title.strip('#').strip('=').strip(':').strip()
+                if not title or len(title) < 3 or len(title) > 100:
+                    continue
+
+                # Extract summary (next few sentences)
+                section_start = match.end()
+                section_text = content[section_start:section_start + 500]
+                sentences = section_text.split('.')
+                summary = '. '.join(s.strip() for s in sentences[:2] if s.strip())[:200]
+                if not summary:
+                    summary = f"Content section covering {title}"
+
+                # Extract key topics (capitalized words)
+                topic_text = content[section_start:section_start + 1000]
+                words = topic_text.split()
+                topics = []
+                for word in words:
+                    clean = word.strip('.,;:!?()[]"\'')
+                    if clean and clean[0].isupper() and len(clean) > 3 and clean not in topics:
+                        topics.append(clean)
+                        if len(topics) >= 5:
+                            break
+                if not topics:
+                    topics = ["Key concepts", "Main ideas"]
+
+                detected_sections.append({
+                    'position': pos,
+                    'title': title,
+                    'summary': summary,
+                    'key_topics': topics,
+                    'confidence': confidence
+                })
+                used_positions.add(pos)
+
+        # Sort by position and limit
+        detected_sections.sort(key=lambda x: x['position'])
+
+        # Filter out non-content sections
+        non_content_patterns = [
+            'table of contents', 'contents', 'dedication', 'acknowledgment',
+            'acknowledgement', 'foreword', 'preface', 'index', 'bibliography',
+            'references', 'works cited', 'appendix', 'copyright', 'about the author',
+            'author bio', 'glossary'
+        ]
+        detected_sections = [
+            s for s in detected_sections
+            if not any(pattern in s['title'].lower() for pattern in non_content_patterns)
+        ]
+
+        detected_sections = detected_sections[:max_sections]
+
+        # If no sections detected, create default sections from paragraphs
+        if not detected_sections:
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip() and len(p.strip()) > 100]
+            num_sections = min(max(3, len(paragraphs) // 3), max_sections)
+
+            for i in range(num_sections):
+                para_idx = (i * len(paragraphs)) // num_sections
+                if para_idx < len(paragraphs):
+                    para = paragraphs[para_idx]
+                    first_line = para.split('\n')[0][:80]
+                    detected_sections.append({
+                        'title': f"Section {i + 1}: {first_line}",
+                        'summary': para[:200],
+                        'key_topics': ["Main concepts", "Key ideas"],
+                        'confidence': 0.5
+                    })
+
+        # Create DetectedSection objects
+        sections = [
+            DetectedSection(
+                order=i + 1,
+                title=s['title'],
+                summary=s['summary'],
+                key_topics=s['key_topics'],
+                confidence=s.get('confidence', 0.7)
+            )
+            for i, s in enumerate(detected_sections)
+        ]
+
+        # Estimate time: ~5 minutes per 1000 chars
+        estimated_time = max(30, (len(content) // 1000) * 5)
+
+        return DocumentOutline(
+            document_title=document_title,
+            document_type=document_type,
+            total_sections=len(sections),
+            sections=sections,
+            estimated_total_time_minutes=estimated_time,
+            analysis_notes=f"Detected {len(sections)} sections using pattern matching."
+        )
+
+    async def generate_chapters_from_outline(
+        self,
+        topic: str,
+        content: str,
+        confirmed_sections: List[ConfirmedSection],
+        difficulty: str
+    ) -> List[Chapter]:
+        """
+        Generate detailed chapters based on user-confirmed outline.
+
+        Creates chapters with rich key_ideas for question generation.
+        """
+        # Filter to included sections only
+        included_sections = [s for s in confirmed_sections if s.include]
+        if not included_sections:
+            included_sections = confirmed_sections[:1] if confirmed_sections else []
+
+        # Split content roughly by section count
+        content_length = len(content)
+        section_size = content_length // max(1, len(included_sections))
+
+        chapters = []
+        for i, section in enumerate(included_sections):
+            # Get content chunk for this section
+            start = i * section_size
+            end = start + section_size + 500  # overlap for context
+            section_content = content[start:min(end, content_length)]
+
+            # Difficulty-based time estimation
+            if difficulty == "beginner":
+                time_per_chapter = 25
+            elif difficulty == "advanced":
+                time_per_chapter = 90
+            else:
+                time_per_chapter = 45
+
+            # Generate summary
+            sentences = section_content.split('.')
+            summary_sentences = [s.strip() for s in sentences[:3] if len(s.strip()) > 20]
+            summary = '. '.join(summary_sentences)[:300]
+            if not summary:
+                summary = f"This chapter covers {section.title} with focus on {', '.join(section.key_topics[:2])}."
+
+            # Generate key_ideas (specific testable statements)
+            key_ideas = []
+            for sent in sentences[:15]:
+                sent = sent.strip()
+                if len(sent) > 30 and len(sent) < 200:
+                    # Make it sound like a testable fact
+                    idea = sent
+                    if not idea.endswith('.'):
+                        idea += '.'
+                    key_ideas.append(idea)
+                    if len(key_ideas) >= 8:
+                        break
+
+            # Ensure minimum key_ideas
+            if len(key_ideas) < 5:
+                for topic_item in section.key_topics:
+                    key_ideas.append(f"{topic_item} is an important concept in {section.title}.")
+                    if len(key_ideas) >= 5:
+                        break
+
+            # Source excerpt
+            source_excerpt = section_content[:300].replace('\n', ' ').strip()
+            if len(section_content) > 300:
+                source_excerpt += "..."
+
+            chapter = Chapter(
+                number=i + 1,
+                title=section.title,
+                summary=summary,
+                key_concepts=section.key_topics[:5],
+                key_ideas=key_ideas[:10],
+                difficulty=difficulty,
+                estimated_time_minutes=time_per_chapter,
+                source_excerpt=source_excerpt
+            )
+            chapters.append(chapter)
+
+        return chapters
 
     def get_supported_topics(self) -> List[str]:
         """Get list of topics that have specific mock data."""

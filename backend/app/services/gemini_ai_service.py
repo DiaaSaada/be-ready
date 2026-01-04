@@ -8,6 +8,7 @@ import json
 import uuid
 import google.generativeai as genai
 from app.models.course import Chapter, CourseConfig
+from app.models.document_analysis import DocumentOutline, DetectedSection, ConfirmedSection
 from app.models.question import (
     QuestionGenerationConfig,
     ChapterQuestions,
@@ -529,3 +530,251 @@ Provide a clear, concise answer based on the context. If the context doesn't con
         llm_logger.log_response(start_time, "RAG Query")
 
         return response.text
+
+    async def analyze_document_structure(
+        self,
+        content: str,
+        max_sections: int = 15
+    ) -> DocumentOutline:
+        """
+        Analyze document content and detect natural sections using Gemini AI.
+
+        Args:
+            content: Full extracted document text
+            max_sections: Maximum number of sections to detect
+
+        Returns:
+            DocumentOutline with detected structure
+        """
+        # Truncate content if too long
+        analysis_content = content[:50000]
+
+        prompt = f"""Analyze this document and identify its natural sections/chapters.
+
+DOCUMENT CONTENT:
+{analysis_content}
+
+INSTRUCTIONS:
+1. Identify the document type (textbook, article, manual, notes, lecture, other)
+2. Detect natural section breaks (headings, chapters, topic transitions)
+3. For each section, identify:
+   - A clear title (use document headings if present, or infer from content)
+   - Key topics covered (3-7 topics per section)
+   - Brief summary (1-2 sentences)
+4. Return between 3 and {max_sections} sections based on document structure
+5. DO NOT impose arbitrary divisions - follow the document's natural organization
+
+IMPORTANT - SKIP these non-content sections (do NOT include them):
+- Table of Contents
+- Dedication
+- Acknowledgments / Acknowledgements
+- Foreword / Preface (unless it contains substantial educational content)
+- Index
+- Bibliography / References / Works Cited
+- Appendices (unless they contain educational content worth studying)
+- Copyright / Legal notices
+- About the Author / Author Bio
+- Glossary (unless it's substantial enough to be a learning resource)
+
+Only include sections with actual educational/learning content that would make sense as course chapters.
+
+Return ONLY valid JSON (no markdown, no extra text):
+{{
+  "document_title": "Main title of the document",
+  "document_type": "textbook|article|manual|notes|lecture|other",
+  "total_sections": <number>,
+  "estimated_total_time_minutes": <number>,
+  "analysis_notes": "Any notes about the document structure",
+  "sections": [
+    {{
+      "order": 1,
+      "title": "Section Title",
+      "summary": "What this section covers...",
+      "key_topics": ["topic1", "topic2", "topic3"],
+      "confidence": 0.9
+    }}
+  ]
+}}"""
+
+        start_time = llm_logger.log_request(settings.model_document_analysis, prompt, "Document Analysis")
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.5,
+            max_output_tokens=settings.max_tokens_document_analysis,
+        )
+        response = await self.model.generate_content_async(
+            prompt,
+            generation_config=generation_config
+        )
+        llm_logger.log_response(start_time, "Document Analysis")
+
+        # Parse response
+        response_text = response.text
+        json_text = self._parse_json_response(response_text)
+        data = json.loads(json_text)
+
+        # Create DetectedSection objects
+        sections = [
+            DetectedSection(
+                order=s.get("order", i + 1),
+                title=s["title"],
+                summary=s.get("summary", ""),
+                key_topics=s.get("key_topics", []),
+                confidence=s.get("confidence", 0.8)
+            )
+            for i, s in enumerate(data.get("sections", []))
+        ]
+
+        return DocumentOutline(
+            document_title=data.get("document_title", "Untitled Document"),
+            document_type=data.get("document_type", "notes"),
+            total_sections=len(sections),
+            sections=sections,
+            estimated_total_time_minutes=data.get("estimated_total_time_minutes", 60),
+            analysis_notes=data.get("analysis_notes")
+        )
+
+    async def generate_chapters_from_outline(
+        self,
+        topic: str,
+        content: str,
+        confirmed_sections: List[ConfirmedSection],
+        difficulty: str
+    ) -> List[Chapter]:
+        """
+        Generate detailed chapters based on user-confirmed outline using Gemini AI.
+        Uses batch processing to handle large chapter counts without token limit issues.
+
+        Args:
+            topic: Course topic
+            content: Full extracted document text
+            confirmed_sections: User-confirmed sections
+            difficulty: Course difficulty level
+
+        Returns:
+            List of Chapter objects with key_ideas populated
+        """
+        # Filter to included sections only
+        included_sections = [s for s in confirmed_sections if s.include]
+        if not included_sections:
+            included_sections = confirmed_sections[:1] if confirmed_sections else []
+
+        # Truncate content if needed
+        analysis_content = content[:40000]
+
+        # Process in batches to avoid token limits (5 chapters per batch)
+        BATCH_SIZE = 5
+        all_chapters = []
+
+        for batch_start in range(0, len(included_sections), BATCH_SIZE):
+            batch_sections = included_sections[batch_start:batch_start + BATCH_SIZE]
+            batch_chapters = await self._generate_chapter_batch(
+                topic=topic,
+                content=analysis_content,
+                sections=batch_sections,
+                difficulty=difficulty,
+                start_number=batch_start + 1
+            )
+            all_chapters.extend(batch_chapters)
+
+        return all_chapters
+
+    async def _generate_chapter_batch(
+        self,
+        topic: str,
+        content: str,
+        sections: List[ConfirmedSection],
+        difficulty: str,
+        start_number: int
+    ) -> List[Chapter]:
+        """
+        Generate a batch of chapters (max 5 at a time) to stay within token limits.
+
+        Args:
+            topic: Course topic
+            content: Document content (already truncated)
+            sections: Batch of sections to generate
+            difficulty: Course difficulty level
+            start_number: Starting chapter number for this batch
+
+        Returns:
+            List of Chapter objects for this batch
+        """
+        # Build sections info for this batch
+        sections_info = "\n".join([
+            f"Chapter {start_number + i}: {s.title}\n  Topics: {', '.join(s.key_topics)}"
+            for i, s in enumerate(sections)
+        ])
+
+        # Difficulty-specific guidance
+        difficulty_guidance = {
+            "beginner": "Use simple language, avoid jargon, and explain all terms.",
+            "intermediate": "Include practical applications and some technical depth.",
+            "advanced": "Focus on nuances, edge cases, and expert-level insights."
+        }
+        diff_guidance = difficulty_guidance.get(difficulty, difficulty_guidance["intermediate"])
+
+        # Time per chapter
+        time_map = {"beginner": 25, "intermediate": 45, "advanced": 90}
+        time_per_chapter = time_map.get(difficulty, 45)
+
+        end_number = start_number + len(sections) - 1
+        prompt = f"""Create detailed chapter content for chapters {start_number} to {end_number} of this {difficulty}-level course.
+
+TOPIC: {topic}
+
+CHAPTERS TO GENERATE (exactly {len(sections)} chapters):
+{sections_info}
+
+DOCUMENT CONTENT:
+{content}
+
+{diff_guidance}
+
+For EACH chapter listed above, generate:
+- number: Use the chapter number specified above ({start_number} to {end_number})
+- title: Use the chapter title provided
+- summary: 2-3 sentences explaining what learner will gain
+- key_concepts: 3-5 main concepts/skills (high-level)
+- key_ideas: 5-10 SPECIFIC testable statements (granular, for question generation)
+- source_excerpt: 1-2 key sentences from the source content
+- difficulty: "{difficulty}"
+- estimated_time_minutes: {time_per_chapter}
+
+IMPORTANT: key_ideas must be specific, testable facts from the content.
+
+Return ONLY valid JSON (no markdown, no extra text):
+{{
+  "chapters": [
+    {{
+      "number": {start_number},
+      "title": "Chapter Title",
+      "summary": "What the learner will learn...",
+      "key_concepts": ["concept1", "concept2"],
+      "key_ideas": ["Specific fact 1", "Specific fact 2", "..."],
+      "source_excerpt": "Key quote from source...",
+      "difficulty": "{difficulty}",
+      "estimated_time_minutes": {time_per_chapter}
+    }}
+  ]
+}}"""
+
+        start_time = llm_logger.log_request(self.default_model, prompt, f"Chapter Batch {start_number}-{end_number}")
+        generation_config = genai.types.GenerationConfig(
+            temperature=settings.temperature,
+            max_output_tokens=settings.max_tokens_chapter,
+        )
+        response = await self.model.generate_content_async(
+            prompt,
+            generation_config=generation_config
+        )
+        llm_logger.log_response(start_time, f"Chapter Batch {start_number}-{end_number}")
+
+        # Parse response
+        response_text = response.text
+        json_text = self._parse_json_response(response_text)
+        data = json.loads(json_text)
+
+        # Convert to Chapter objects
+        chapters = [Chapter(**chapter) for chapter in data.get("chapters", [])]
+
+        return chapters

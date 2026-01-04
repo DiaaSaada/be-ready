@@ -101,12 +101,24 @@ class QuestionGenerator:
         else:
             length_guidance = "Questions should be MODERATE length (2-4 lines). Balance clarity with depth."
 
+        # Build key_ideas section if available (for 80% coverage)
+        key_ideas_section = ""
+        if hasattr(config, 'key_ideas') and config.key_ideas and len(config.key_ideas) > 0:
+            ideas_list = "\n".join([f"  - {idea}" for idea in config.key_ideas])
+            key_ideas_section = f"""
+KEY IDEAS TO COVER (REQUIRED - generate at least 1 question per idea):
+{ideas_list}
+
+COVERAGE REQUIREMENT: Ensure at least 80% of the key ideas above are tested.
+Each key idea should have 2-3 questions testing different aspects."""
+
         prompt = f"""You are an expert exam creator designing questions for {config.audience}.
 
 Create questions for this chapter from a {config.difficulty} course on {config.topic}.
 
 Chapter {config.chapter_number}: {config.chapter_title}
-Key Concepts to Cover: {key_concepts_str}
+Key Concepts: {key_concepts_str}
+{key_ideas_section}
 
 Generate EXACTLY:
 - {config.recommended_mcq_count} Multiple Choice Questions
@@ -116,12 +128,13 @@ RULES:
 1. Language must be appropriate for {config.audience}
 2. {length_guidance}
 3. Cover ALL key concepts (at least 1 question per concept)
-4. Mix difficulties: ~30% easy, ~50% medium, ~20% hard
-5. MCQ options: exactly 4 options (A, B, C, D), one clearly correct, plausible distractors
-6. NO trick questions or deliberately confusing wording
-7. NO "All of the above" or "None of the above" options
-8. Each question MUST have a clear explanation for the correct answer
-9. True/False statements must be definitively true or false, not ambiguous
+4. If key ideas are provided, ensure each key idea has at least 1 question
+5. Mix difficulties: ~30% easy, ~50% medium, ~20% hard
+6. MCQ options: exactly 4 options (A, B, C, D), one clearly correct, plausible distractors
+7. NO trick questions or deliberately confusing wording
+8. NO "All of the above" or "None of the above" options
+9. Each question MUST have a clear explanation for the correct answer
+10. True/False statements must be definitively true or false, not ambiguous
 
 CRITICAL JSON FORMATTING:
 - Return ONLY valid JSON, no markdown code blocks, no extra text

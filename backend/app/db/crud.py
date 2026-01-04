@@ -753,3 +753,123 @@ async def mark_chapter_complete(
     )
 
     return result.modified_count > 0
+
+
+# =============================================================================
+# Document Analysis Operations (Temporary Storage)
+# =============================================================================
+
+DOCUMENT_ANALYSES_COLLECTION = "document_analyses"
+
+
+async def save_document_analysis(
+    user_id: str,
+    outline: Dict[str, Any],
+    raw_content: str,
+    source_files: List[Dict[str, Any]],
+    expires_in_minutes: int = 30
+) -> Optional[str]:
+    """
+    Save a temporary document analysis for user confirmation.
+
+    The document will have a TTL and expire after the specified time.
+
+    Args:
+        user_id: The user's ID
+        outline: DocumentOutline as dict
+        raw_content: Full extracted text from files
+        source_files: List of file metadata dicts
+        expires_in_minutes: Time until document expires
+
+    Returns:
+        Inserted document ID as string, or None if DB not connected
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return None
+
+    from datetime import timedelta
+    now = datetime.utcnow()
+    expires_at = now + timedelta(minutes=expires_in_minutes)
+
+    document = {
+        "user_id": user_id,
+        "outline": outline,
+        "raw_content": raw_content,
+        "source_files": source_files,
+        "created_at": now,
+        "expires_at": expires_at
+    }
+
+    result = await db[DOCUMENT_ANALYSES_COLLECTION].insert_one(document)
+
+    # Ensure TTL index exists (MongoDB will automatically delete expired docs)
+    # This is idempotent - if index exists, it won't create a duplicate
+    try:
+        await db[DOCUMENT_ANALYSES_COLLECTION].create_index(
+            "expires_at",
+            expireAfterSeconds=0
+        )
+    except Exception:
+        # Index may already exist
+        pass
+
+    return str(result.inserted_id)
+
+
+async def get_document_analysis(
+    analysis_id: str,
+    user_id: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve a pending document analysis.
+
+    Args:
+        analysis_id: The analysis document ID
+        user_id: The user's ID (must match for security)
+
+    Returns:
+        Analysis document or None if not found/expired
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return None
+
+    try:
+        analysis = await db[DOCUMENT_ANALYSES_COLLECTION].find_one({
+            "_id": ObjectId(analysis_id),
+            "user_id": user_id
+        })
+
+        if analysis:
+            # Check if expired (in case TTL hasn't cleaned up yet)
+            if analysis.get("expires_at") and analysis["expires_at"] < datetime.utcnow():
+                return None
+            analysis["id"] = str(analysis["_id"])
+
+        return analysis
+    except Exception:
+        return None
+
+
+async def delete_document_analysis(analysis_id: str) -> bool:
+    """
+    Delete a document analysis after processing.
+
+    Args:
+        analysis_id: The analysis document ID
+
+    Returns:
+        True if deleted, False otherwise
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return False
+
+    try:
+        result = await db[DOCUMENT_ANALYSES_COLLECTION].delete_one({
+            "_id": ObjectId(analysis_id)
+        })
+        return result.deleted_count > 0
+    except Exception:
+        return False

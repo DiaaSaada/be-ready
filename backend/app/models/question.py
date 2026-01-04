@@ -125,8 +125,9 @@ class QuestionGenerationConfig(BaseModel):
     chapter_number: int = Field(..., ge=1, description="Chapter number")
     chapter_title: str = Field(..., description="Chapter title")
     key_concepts: List[str] = Field(default_factory=list, description="Key concepts to test")
-    recommended_mcq_count: int = Field(default=5, ge=1, le=20, description="Number of MCQ questions to generate")
-    recommended_tf_count: int = Field(default=3, ge=1, le=10, description="Number of True/False questions to generate")
+    key_ideas: List[str] = Field(default_factory=list, description="Specific testable ideas from content")
+    recommended_mcq_count: int = Field(default=5, ge=1, le=40, description="Number of MCQ questions to generate")
+    recommended_tf_count: int = Field(default=3, ge=1, le=15, description="Number of True/False questions to generate")
 
     @classmethod
     def derive_audience(cls, difficulty: str) -> str:

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { courseAPI } from '../services/api';
 import Header from '../components/Header';
 import FileUpload from '../components/FileUpload';
+import DocumentOutlineReview from '../components/DocumentOutlineReview';
 
 function NewCourse() {
   const navigate = useNavigate();
@@ -25,12 +26,17 @@ function NewCourse() {
   const [files, setFiles] = useState([]);
   const [optionalTopic, setOptionalTopic] = useState('');
 
+  // Two-phase file flow state
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
+
   // Reset state when switching modes
   const handleModeChange = (newMode) => {
     setMode(newMode);
     setError(null);
     setSuccessMessage(null);
     setValidationResult(null);
+    setAnalysisResult(null);
   };
 
   // Validate topic (topic mode)
@@ -72,7 +78,75 @@ function NewCourse() {
     }
   };
 
-  // Generate course from files
+  // Phase 1: Analyze files to detect document structure
+  const handleAnalyzeFiles = async () => {
+    if (files.length === 0) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const result = await courseAPI.analyzeFiles(files);
+      setAnalysisResult(result);
+      setIsAnalyzing(false);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'object') {
+        setError(detail.message || JSON.stringify(detail));
+      } else {
+        setError(detail || 'Failed to analyze files');
+      }
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Phase 2: Generate course from confirmed outline
+  const handleConfirmOutline = async (confirmedSections, customTopic) => {
+    setIsGenerating(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await courseAPI.generateFromOutline(
+        analysisResult.analysis_id,
+        confirmedSections,
+        difficulty,
+        customTopic
+      );
+
+      // Show results including any file processing errors
+      const successCount = result.source_files?.filter((f) => f.success).length || 0;
+      const failCount = result.source_files?.filter((f) => !f.success).length || 0;
+
+      let message = `Course "${result.topic}" created with ${result.total_chapters} chapters!`;
+      if (failCount > 0) {
+        message += ` (${failCount} file(s) could not be processed)`;
+      }
+
+      setSuccessMessage(message);
+      setIsGenerating(false);
+
+      setTimeout(() => {
+        navigate('/app/my-courses');
+      }, 2000);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'object') {
+        setError(detail.message || JSON.stringify(detail));
+      } else {
+        setError(detail || 'Failed to generate course');
+      }
+      setIsGenerating(false);
+    }
+  };
+
+  // Cancel outline review and go back to file selection
+  const handleCancelOutline = () => {
+    setAnalysisResult(null);
+    setError(null);
+  };
+
+  // Legacy: Generate course from files directly (single phase)
   const handleGenerateFromFiles = async () => {
     if (files.length === 0) return;
 
@@ -321,76 +395,58 @@ function NewCourse() {
         {/* Files Mode */}
         {mode === 'files' && (
           <div className="space-y-6">
-            {/* File Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Upload Your Study Materials
-              </label>
-              <FileUpload onFilesChange={setFiles} disabled={isGenerating} />
-            </div>
+            {/* Phase 1: File Upload (before analysis) */}
+            {!analysisResult && (
+              <>
+                {/* File Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload Your Study Materials
+                  </label>
+                  <FileUpload onFilesChange={setFiles} disabled={isAnalyzing} />
+                </div>
 
-            {/* Optional Topic */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Course Title (optional)
-              </label>
-              <input
-                type="text"
-                value={optionalTopic}
-                onChange={(e) => setOptionalTopic(e.target.value)}
-                placeholder="Leave blank to auto-detect from content"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                disabled={isGenerating}
+                {/* Analyze Button */}
+                <button
+                  onClick={handleAnalyzeFiles}
+                  disabled={files.length === 0 || isAnalyzing}
+                  className="w-full py-4 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg"
+                >
+                  {isAnalyzing ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Analyzing Document Structure...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Analyze {files.length} File{files.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </button>
+
+                <p className="text-sm text-gray-500 text-center">
+                  We'll analyze your files and show you the detected sections before generating the course.
+                </p>
+              </>
+            )}
+
+            {/* Phase 2: Outline Review (after analysis) */}
+            {analysisResult && !successMessage && (
+              <DocumentOutlineReview
+                analysisResult={analysisResult}
+                onConfirm={handleConfirmOutline}
+                onCancel={handleCancelOutline}
+                isGenerating={isGenerating}
+                difficulty={difficulty}
+                setDifficulty={setDifficulty}
               />
-            </div>
-
-            {/* Difficulty Selector */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Difficulty Level
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {['beginner', 'intermediate', 'advanced'].map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setDifficulty(level)}
-                    disabled={isGenerating}
-                    className={`py-3 px-4 rounded-lg border-2 font-medium capitalize transition-all ${
-                      difficulty === level
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-sm text-gray-500">
-                {difficulty === 'beginner' && 'Simple language, shorter chapters, basic concepts.'}
-                {difficulty === 'intermediate' && 'Technical terms allowed, moderate depth.'}
-                {difficulty === 'advanced' && 'Industry jargon, comprehensive coverage.'}
-              </p>
-            </div>
-
-            {/* Generate Button (Files Mode) */}
-            <button
-              onClick={handleGenerateFromFiles}
-              disabled={files.length === 0 || isGenerating}
-              className="w-full py-4 px-4 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg"
-            >
-              {isGenerating ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Processing Files & Generating Course...
-                </span>
-              ) : (
-                `Generate Course from ${files.length} File${files.length !== 1 ? 's' : ''}`
-              )}
-            </button>
+            )}
           </div>
         )}
 

@@ -93,8 +93,8 @@ class QuestionAnalyzer:
         """
         Analyze a chapter to determine optimal question counts.
 
-        Uses AI (Haiku 3.5) to analyze topic complexity, chapter depth,
-        key concepts, and difficulty to recommend question counts.
+        If the chapter has key_ideas, calculates based on 2-3 questions per idea
+        for ~80% coverage. Otherwise uses AI analysis.
 
         Args:
             chapter: The chapter to analyze
@@ -109,7 +109,29 @@ class QuestionAnalyzer:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        # Build prompt for AI analysis
+        # NEW: If chapter has key_ideas, calculate based on coverage requirements
+        if hasattr(chapter, 'key_ideas') and chapter.key_ideas and len(chapter.key_ideas) > 0:
+            num_ideas = len(chapter.key_ideas)
+            # Target 2.5 questions per idea for ~80% coverage
+            total_questions = int(num_ideas * 2.5)
+            total_questions = max(8, min(55, total_questions))  # Clamp to reasonable range
+
+            # Split: 70% MCQ, 30% True/False
+            mcq_count = max(5, min(40, int(total_questions * 0.7)))
+            tf_count = max(3, min(15, total_questions - mcq_count))
+
+            recommendation = QuestionCountRecommendation(
+                mcq_count=mcq_count,
+                true_false_count=tf_count,
+                total_count=mcq_count + tf_count,
+                reasoning=f"Based on {num_ideas} key ideas: generating ~2.5 questions per idea for 80% knowledge coverage."
+            )
+
+            # Cache the result
+            self._cache[cache_key] = recommendation
+            return recommendation
+
+        # Fallback to AI analysis for chapters without key_ideas
         key_concepts_str = ", ".join(chapter.key_concepts) if chapter.key_concepts else "Not specified"
 
         prompt = f"""Given this chapter from a {difficulty} course on {topic}:

@@ -5,6 +5,7 @@ Handles all course-related endpoints with configurable AI providers.
 from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File, Form
 from typing import Optional, List
 from pathlib import Path
+from datetime import datetime, timedelta
 import uuid
 import os
 from app.models.course import (
@@ -18,6 +19,12 @@ from app.models.course import (
 from app.models.validation import TopicValidationResult
 from app.models.responses import CourseSummary, MyCoursesResponse
 from app.models.user import UserInDB
+from app.models.document_analysis import (
+    DocumentAnalysisResponse,
+    DocumentOutline,
+    ConfirmOutlineRequest,
+    ConfirmedSection
+)
 from app.dependencies.auth import get_current_user
 from app.services.ai_service_factory import AIServiceFactory
 from app.services.topic_validator import get_topic_validator
@@ -438,6 +445,347 @@ async def generate_course_from_files(
                 os.unlink(temp_file)
             except Exception:
                 pass
+
+
+@router.post(
+    "/analyze-files",
+    response_model=DocumentAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Analyze uploaded files for document structure",
+    description="Phase 1: Upload files and get detected chapter structure for user review."
+)
+async def analyze_files_for_structure(
+    files: List[UploadFile] = File(..., description="Files to analyze (PDF, DOCX, TXT)"),
+    provider: Optional[str] = Query(default=None, description="AI provider override"),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """
+    Analyze uploaded files and return detected document structure.
+
+    This is Phase 1 of the two-phase file-to-course flow.
+    The detected structure is shown to the user for review before
+    generating detailed chapters.
+
+    Flow:
+    1. Validate and parse uploaded files
+    2. Use AI to detect natural sections/chapters
+    3. Store analysis temporarily (30 min TTL)
+    4. Return structure for user review
+    """
+    # Validate file count
+    if len(files) > settings.max_upload_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {settings.max_upload_files} files allowed"
+        )
+
+    if len(files) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required"
+        )
+
+    # Validate file extensions
+    for file in files:
+        ext = Path(file.filename).suffix.lower()
+        if ext not in settings.allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{file.filename}' has unsupported type. Allowed: {settings.allowed_extensions}"
+            )
+
+    # Check file sizes and read content
+    file_contents = []
+    for file in files:
+        content = await file.read()
+        if len(content) > settings.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{file.filename}' exceeds maximum size of {settings.max_upload_size // (1024*1024)}MB"
+            )
+        file_contents.append((file.filename, content))
+        await file.seek(0)
+
+    # Save files temporarily and parse
+    temp_dir = Path(settings.upload_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    temp_files = []
+    file_paths = []
+
+    try:
+        # Save uploaded files temporarily
+        for filename, content in file_contents:
+            temp_path = temp_dir / f"{uuid.uuid4()}_{filename}"
+            with open(temp_path, 'wb') as f:
+                f.write(content)
+            temp_files.append(temp_path)
+            file_paths.append(temp_path)
+
+        # Parse all files
+        parser = get_file_parser()
+        parse_result = await parser.parse_files(file_paths)
+
+        # Check if we have enough content
+        if parse_result.total_chars < settings.min_content_chars:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Extracted content is too short ({parse_result.total_chars} chars). "
+                       f"Minimum {settings.min_content_chars} chars required."
+            )
+
+        # If all files failed, return error
+        if parse_result.successful_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "all_files_failed",
+                    "message": "Could not extract content from any uploaded file",
+                    "errors": parse_result.errors
+                }
+            )
+
+        # Use AI to analyze document structure - analyze each file separately
+        ai_service = AIServiceFactory.get_service(
+            use_case=UseCase.DOCUMENT_ANALYSIS,
+            provider_override=provider
+        )
+
+        # Analyze each file separately to preserve source attribution
+        all_sections = []
+        document_titles = []
+        document_types = []
+        total_time = 0
+
+        successful_files = [f for f in parse_result.files if f.success and f.content.strip()]
+
+        for parsed_file in successful_files:
+            file_outline = await ai_service.analyze_document_structure(
+                content=parsed_file.content,
+                max_sections=15
+            )
+
+            # Add source_file to each section and collect them
+            for section in file_outline.sections:
+                section.source_file = parsed_file.filename
+                all_sections.append(section)
+
+            document_titles.append(file_outline.document_title)
+            document_types.append(file_outline.document_type)
+            total_time += file_outline.estimated_total_time_minutes
+
+        # Renumber sections sequentially
+        for i, section in enumerate(all_sections):
+            section.order = i + 1
+
+        # Build combined outline
+        combined_title = document_titles[0] if len(document_titles) == 1 else " + ".join(document_titles[:3])
+        if len(document_titles) > 3:
+            combined_title += f" (+{len(document_titles) - 3} more)"
+
+        # Determine most common document type
+        document_type = max(set(document_types), key=document_types.count) if document_types else "notes"
+
+        document_outline = DocumentOutline(
+            document_title=combined_title,
+            document_type=document_type,
+            total_sections=len(all_sections),
+            sections=all_sections,
+            estimated_total_time_minutes=total_time,
+            analysis_notes=f"Analyzed {len(successful_files)} file(s) with {len(all_sections)} total sections."
+        )
+
+        # Prepare source file metadata
+        source_files_meta = [
+            {
+                "filename": f.filename,
+                "file_type": f.file_type,
+                "char_count": f.char_count,
+                "success": f.success,
+                "error": f.error
+            }
+            for f in parse_result.files
+        ]
+
+        # Store analysis temporarily with TTL
+        analysis_id = await crud.save_document_analysis(
+            user_id=current_user.id,
+            outline=document_outline.model_dump(),
+            raw_content=parse_result.combined_content,
+            source_files=source_files_meta,
+            expires_in_minutes=settings.analysis_expiry_minutes
+        )
+
+        if not analysis_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to store document analysis"
+            )
+
+        # Build response
+        file_results = [
+            FileUploadResult(
+                filename=f.filename,
+                file_type=f.file_type,
+                char_count=f.char_count,
+                success=f.success,
+                error=f.error
+            )
+            for f in parse_result.files
+        ]
+
+        expires_at = datetime.utcnow() + timedelta(minutes=settings.analysis_expiry_minutes)
+
+        return DocumentAnalysisResponse(
+            analysis_id=analysis_id,
+            document_outline=document_outline,
+            source_files=file_results,
+            extracted_text_chars=parse_result.total_chars,
+            expires_at=expires_at
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze files: {str(e)}"
+        )
+    finally:
+        # Cleanup temporary files
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass
+
+
+@router.post(
+    "/generate-from-outline",
+    response_model=GenerateFromFilesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate course from confirmed document outline",
+    description="Phase 2: Generate detailed chapters from user-confirmed structure."
+)
+async def generate_from_confirmed_outline(
+    request: ConfirmOutlineRequest,
+    provider: Optional[str] = Query(default=None, description="AI provider override"),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """
+    Generate chapters based on user-confirmed document structure.
+
+    This is Phase 2 of the two-phase file-to-course flow.
+
+    Flow:
+    1. Retrieve stored analysis by analysis_id
+    2. Filter to included sections only
+    3. Generate detailed chapters with key_ideas
+    4. Save course with source metadata
+    5. Clean up analysis document
+    """
+    # Retrieve stored analysis
+    analysis = await crud.get_document_analysis(request.analysis_id, current_user.id)
+
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found or expired. Please upload files again."
+        )
+
+    # Get confirmed sections that are included
+    included_sections = [s for s in request.confirmed_sections if s.include]
+
+    if not included_sections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one section must be included"
+        )
+
+    try:
+        # Get topic from request or stored outline
+        topic = request.custom_topic
+        if not topic or not topic.strip():
+            topic = analysis["outline"].get("document_title", "Study Guide")
+
+        # Generate chapters from outline
+        ai_service = AIServiceFactory.get_service(
+            use_case=UseCase.CHAPTER_GENERATION,
+            provider_override=provider
+        )
+
+        chapters = await ai_service.generate_chapters_from_outline(
+            topic=topic,
+            content=analysis["raw_content"],
+            confirmed_sections=request.confirmed_sections,
+            difficulty=request.difficulty
+        )
+
+        actual_provider = ai_service.get_provider_name()
+
+        # Get course configuration for response
+        configurator = get_course_configurator()
+        config = configurator.get_config(
+            complexity_score=5,
+            difficulty=request.difficulty
+        )
+
+        # Prepare source file metadata from stored analysis
+        source_files_meta = analysis.get("source_files", [])
+
+        # Save course
+        course_id = await crud.save_course_from_files(
+            user_id=current_user.id,
+            topic=topic,
+            difficulty=request.difficulty,
+            complexity_score=5,
+            category=None,
+            chapters=chapters,
+            provider=actual_provider,
+            source_files=source_files_meta
+        )
+
+        # Auto-enroll user
+        if course_id:
+            await user_repository.enroll_user_in_course(current_user.id, course_id)
+
+        # Clean up stored analysis
+        await crud.delete_document_analysis(request.analysis_id)
+
+        # Build response
+        file_results = [
+            FileUploadResult(
+                filename=f.get("filename", ""),
+                file_type=f.get("file_type", ""),
+                char_count=f.get("char_count", 0),
+                success=f.get("success", True),
+                error=f.get("error")
+            )
+            for f in source_files_meta
+        ]
+
+        return GenerateFromFilesResponse(
+            id=course_id,
+            topic=topic,
+            difficulty=request.difficulty,
+            total_chapters=len(chapters),
+            estimated_study_hours=config.estimated_study_hours,
+            time_per_chapter_minutes=config.time_per_chapter_minutes,
+            complexity_score=5,
+            chapters=chapters,
+            message=f"Generated {len(chapters)} chapters from confirmed outline",
+            source_files=file_results,
+            extracted_text_chars=len(analysis.get("raw_content", "")),
+            config=config
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate course from outline: {str(e)}"
+        )
 
 
 @router.get(
