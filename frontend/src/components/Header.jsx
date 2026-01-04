@@ -36,6 +36,12 @@ function Header() {
           >
             My Progress
           </Link>
+          <Link
+            to="/app/token-usage"
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            Token Usage
+          </Link>
 
           {/* User info and logout */}
           <div className="flex items-center gap-3 ml-4 pl-4 border-l border-gray-200">
