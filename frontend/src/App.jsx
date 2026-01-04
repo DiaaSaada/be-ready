@@ -10,6 +10,7 @@ import Course from './pages/Course';
 import Quiz from './pages/Quiz';
 import QuizResults from './pages/QuizResults';
 import Progress from './pages/Progress';
+import TokenUsage from './pages/TokenUsage';
 
 function App() {
   return (
@@ -55,6 +56,11 @@ function App() {
           <Route path="/app/progress" element={
             <ProtectedRoute>
               <Progress />
+            </ProtectedRoute>
+          } />
+          <Route path="/app/token-usage" element={
+            <ProtectedRoute>
+              <TokenUsage />
             </ProtectedRoute>
           } />
         </Routes>

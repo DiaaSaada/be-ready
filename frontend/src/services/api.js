@@ -183,6 +183,23 @@ export const progressAPI = {
   },
 };
 
+// Token usage endpoints
+export const tokenAPI = {
+  // Get paginated token usage history
+  getUsage: async (limit = 50, offset = 0) => {
+    const response = await api.get('/api/v1/tokens/usage', {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get aggregated token usage summary
+  getSummary: async () => {
+    const response = await api.get('/api/v1/tokens/usage/summary');
+    return response.data;
+  },
+};
+
 // Health check
 export const healthCheck = async () => {
   const response = await api.get('/health');
