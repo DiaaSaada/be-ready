@@ -59,7 +59,7 @@ export const courseAPI = {
     return response.data;
   },
 
-  // Generate course from uploaded files
+  // Generate course from uploaded files (legacy - direct generation)
   generateFromFiles: async (files, topic = null, difficulty = 'intermediate') => {
     const formData = new FormData();
 
@@ -79,6 +79,36 @@ export const courseAPI = {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 120000, // 2 minute timeout for file processing
+    });
+    return response.data;
+  },
+
+  // Phase 1: Analyze files and detect document structure
+  analyzeFiles: async (files) => {
+    const formData = new FormData();
+
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    const response = await api.post('/api/v1/courses/analyze-files', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000, // 1 minute timeout for analysis
+    });
+    return response.data;
+  },
+
+  // Phase 2: Generate course from confirmed outline
+  generateFromOutline: async (analysisId, confirmedSections, difficulty, customTopic = null) => {
+    const response = await api.post('/api/v1/courses/generate-from-outline', {
+      analysis_id: analysisId,
+      confirmed_sections: confirmedSections,
+      difficulty,
+      custom_topic: customTopic,
+    }, {
+      timeout: 120000, // 2 minute timeout for generation
     });
     return response.data;
   },

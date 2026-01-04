@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from app.models.course import Chapter, CourseConfig
 from app.models.question import QuestionGenerationConfig, ChapterQuestions
+from app.models.document_analysis import DocumentOutline, ConfirmedSection
 
 
 class BaseAIService(ABC):
@@ -129,22 +130,70 @@ class BaseAIService(ABC):
     
     @abstractmethod
     async def answer_question(
-        self, 
-        question: str, 
+        self,
+        question: str,
         context: str
     ) -> str:
         """
         Answer a student's question using RAG context.
-        
+
         Args:
             question: Student's question
             context: Relevant context from the material
-            
+
         Returns:
             Answer as string
         """
         pass
-    
+
+    @abstractmethod
+    async def analyze_document_structure(
+        self,
+        content: str,
+        max_sections: int = 15
+    ) -> DocumentOutline:
+        """
+        Analyze document content and detect natural sections/chapters.
+
+        This is Phase 1 of the two-phase file-to-course flow.
+        The detected structure is shown to the user for review before
+        generating detailed chapters.
+
+        Args:
+            content: Full extracted document text
+            max_sections: Maximum number of sections to detect
+
+        Returns:
+            DocumentOutline with detected structure
+        """
+        pass
+
+    @abstractmethod
+    async def generate_chapters_from_outline(
+        self,
+        topic: str,
+        content: str,
+        confirmed_sections: List[ConfirmedSection],
+        difficulty: str
+    ) -> List[Chapter]:
+        """
+        Generate detailed chapters based on user-confirmed outline.
+
+        This is Phase 2 of the two-phase file-to-course flow.
+        Uses the confirmed section structure to generate chapters with
+        rich key_ideas for question generation.
+
+        Args:
+            topic: Course topic (document title or user-specified)
+            content: Full extracted document text
+            confirmed_sections: User-confirmed sections (may be edited)
+            difficulty: Course difficulty level
+
+        Returns:
+            List of Chapter objects with key_ideas populated
+        """
+        pass
+
     def get_provider_name(self) -> str:
         """
         Get the name of this AI provider.
