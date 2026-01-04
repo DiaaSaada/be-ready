@@ -3,7 +3,7 @@ Questions API Router
 Handles question generation and analysis endpoints.
 """
 import time
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from app.models.course import Chapter
@@ -17,6 +17,8 @@ from app.services.question_generator import get_question_generator
 from app.services.ai_service_factory import AIServiceFactory
 from app.config import settings, UseCase
 from app.db import crud
+from app.models.user import UserInDB
+from app.dependencies.auth import get_current_user
 
 
 # Create router
@@ -173,7 +175,8 @@ async def generate_questions(
     skip_cache: bool = Query(
         False,
         description="Skip cache and force regeneration of questions."
-    )
+    ),
+    current_user: UserInDB = Depends(get_current_user)
 ):
     """
     Generate questions for a chapter.
@@ -271,6 +274,9 @@ async def generate_questions(
             recommended_tf_count=tf_count
         )
 
+        # Build context for token logging
+        question_context = f"{request.topic} - Ch{request.chapter_number}: {request.chapter_title}"
+
         # Step 5: Get AI service and generate questions
         if provider == "mock":
             # Use mock service directly
@@ -278,17 +284,29 @@ async def generate_questions(
                 use_case=UseCase.QUESTION_GENERATION,
                 provider_override="mock"
             )
-            chapter_questions = await ai_service.generate_questions_from_config(config)
+            chapter_questions = await ai_service.generate_questions_from_config(
+                config,
+                user_id=current_user.id,
+                context=question_context
+            )
             actual_provider = "mock"
         else:
             # Use the question generator service
             generator = get_question_generator()
             if chunked:
                 # Use chunked generation for reliability with large question sets
-                chapter_questions = await generator.generate_questions_chunked(config)
+                chapter_questions = await generator.generate_questions_chunked(
+                    config,
+                    user_id=current_user.id,
+                    context=question_context
+                )
             else:
                 # Use single-request generation (faster but may fail for large sets)
-                chapter_questions = await generator.generate_questions(config)
+                chapter_questions = await generator.generate_questions(
+                    config,
+                    user_id=current_user.id,
+                    context=question_context
+                )
             actual_provider = provider or settings.default_ai_provider
 
         generation_time = int((time.time() - start_time) * 1000)

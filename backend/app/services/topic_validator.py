@@ -7,6 +7,8 @@ import json
 import re
 from typing import Optional
 from app.models.validation import TopicValidationResult, TopicComplexity, TopicCategory
+from app.models.token_usage import TokenUsageRecord, OperationType
+from app.db import token_repository
 from app.config import settings
 from app.utils.llm_logger import llm_logger
 
@@ -63,6 +65,35 @@ class TopicValidator:
         else:
             # Mock provider - no client needed
             self.client = None
+
+    async def _log_token_usage(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        user_id: str,
+        context: str = None
+    ) -> None:
+        """Log token usage for topic validation."""
+        if user_id is None:
+            print(f"[TOPIC_VALIDATOR] Skipping token log - no user_id")
+            return
+
+        record = TokenUsageRecord(
+            user_id=user_id,
+            operation=OperationType.TOPIC_VALIDATION,
+            provider=self.provider,
+            model=self.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            context=context,
+            course_id=None
+        )
+        try:
+            result = await token_repository.save_token_usage(record)
+            print(f"[TOPIC_VALIDATOR] Token usage saved: {result}")
+        except Exception as e:
+            print(f"[TOPIC_VALIDATOR] ERROR saving tokens: {e}")
 
     def _normalize_topic(self, topic: str) -> str:
         """
@@ -229,12 +260,13 @@ class TopicValidator:
             f"Practical {broad_topic.title()} Skills"
         ])
 
-    async def ai_validate(self, topic: str) -> TopicValidationResult:
+    async def ai_validate(self, topic: str, user_id: str) -> TopicValidationResult:
         """
         Use AI to validate and analyze the topic.
 
         Args:
             topic: The topic to validate
+            user_id: User ID for token usage logging (optional)
 
         Returns:
             TopicValidationResult with full analysis
@@ -300,6 +332,12 @@ Validation Guidelines:
                     messages=[{"role": "user", "content": prompt}]
                 )
                 response_text = response.content[0].text
+                await self._log_token_usage(
+                    response.usage.input_tokens,
+                    response.usage.output_tokens,
+                    user_id,
+                    context=topic
+                )
             elif self.provider == "gemini":
                 # Gemini uses sync API, run in executor
                 import asyncio
@@ -315,6 +353,9 @@ Validation Guidelines:
                     )
                 )
                 response_text = response.text
+                input_tokens = response.usage_metadata.prompt_token_count if hasattr(response, 'usage_metadata') and response.usage_metadata else 0
+                output_tokens = response.usage_metadata.candidates_token_count if hasattr(response, 'usage_metadata') and response.usage_metadata else 0
+                await self._log_token_usage(input_tokens, output_tokens, user_id, context=topic)
             elif self.provider == "openai":
                 response = await self.client.chat.completions.create(
                     model=self.model,
@@ -323,6 +364,13 @@ Validation Guidelines:
                     messages=[{"role": "user", "content": prompt}]
                 )
                 response_text = response.choices[0].message.content
+                if response.usage:
+                    await self._log_token_usage(
+                        response.usage.prompt_tokens,
+                        response.usage.completion_tokens,
+                        user_id,
+                        context=topic
+                    )
             else:
                 # Mock provider - return a default accepted response
                 return TopicValidationResult(
@@ -406,12 +454,13 @@ Validation Guidelines:
                 ]
             )
 
-    async def validate(self, topic: str) -> TopicValidationResult:
+    async def validate(self, topic: str, user_id: str) -> TopicValidationResult:
         """
         Full validation: quick check followed by AI validation if needed.
 
         Args:
             topic: The topic to validate
+            user_id: User ID for token usage logging (optional)
 
         Returns:
             TopicValidationResult with full analysis
@@ -423,7 +472,7 @@ Validation Guidelines:
             return quick_result
 
         # Quick validation passed, run AI validation for deeper analysis
-        return await self.ai_validate(topic)
+        return await self.ai_validate(topic, user_id)
 
 
 # Singleton instance for easy access

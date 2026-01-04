@@ -371,7 +371,9 @@ Return this exact JSON structure:
     async def generate_questions(
         self,
         config: QuestionGenerationConfig,
-        max_retries: int = 1
+        max_retries: int = 1,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> ChapterQuestions:
         """
         Generate questions for a chapter using AI.
@@ -405,7 +407,11 @@ Return this exact JSON structure:
         for attempt in range(max_retries + 1):
             try:
                 # Use the AI service to generate questions
-                chapter_questions = await ai_service.generate_questions_from_config(config)
+                chapter_questions = await ai_service.generate_questions_from_config(
+                    config,
+                    user_id=user_id,
+                    context=context or config.topic
+                )
 
                 # Validate
                 is_valid, error_msg = self._validate_questions(
@@ -562,7 +568,9 @@ Return this exact JSON structure:
     async def generate_questions_chunked(
         self,
         config: QuestionGenerationConfig,
-        save_incrementally: bool = True
+        save_incrementally: bool = True,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> ChapterQuestions:
         """
         Generate questions per key_concept with incremental MongoDB saves.
@@ -632,7 +640,11 @@ Return this exact JSON structure:
                 )
 
                 # Use AI service to generate questions
-                chunk_result = await ai_service.generate_questions_from_config(concept_config)
+                chunk_result = await ai_service.generate_questions_from_config(
+                    concept_config,
+                    user_id=user_id,
+                    context=context or config.topic
+                )
 
                 # Extract questions
                 mcq_questions = chunk_result.mcq_questions

@@ -5,7 +5,7 @@ Implements BaseAIService interface.
 """
 import uuid
 import random
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 from app.models.course import Chapter, CourseConfig
 from app.models.document_analysis import DocumentOutline, DetectedSection, ConfirmedSection
@@ -528,7 +528,9 @@ class MockAIService(BaseAIService):
     async def generate_feedback(
         self,
         user_progress: Dict[str, Any],
-        weak_areas: List[str]
+        weak_areas: List[str],
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Generate mock personalized feedback.
@@ -536,6 +538,8 @@ class MockAIService(BaseAIService):
         Args:
             user_progress: User's progress data
             weak_areas: Areas where student needs improvement
+            user_id: User ID for token usage logging (ignored in mock)
+            context: Context info for token logging (ignored in mock)
 
         Returns:
             Feedback message as string
@@ -568,7 +572,9 @@ You're making progress! Keep it up!"""
         self,
         question: str,
         user_answer: str,
-        correct_answer: str
+        correct_answer: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Mock answer checking.
@@ -577,6 +583,8 @@ You're making progress! Keep it up!"""
             question: The question text
             user_answer: User's answer
             correct_answer: The correct answer
+            user_id: User ID for token usage logging (ignored in mock)
+            context: Context info for token logging (ignored in mock)
 
         Returns:
             Dictionary with 'is_correct', 'explanation', 'score'
@@ -592,14 +600,18 @@ You're making progress! Keep it up!"""
     async def answer_question(
         self,
         question: str,
-        context: str
+        rag_context: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Mock RAG question answering.
 
         Args:
             question: Student's question
-            context: Relevant context from the material
+            rag_context: Relevant context from the material
+            user_id: User ID for token usage logging (ignored in mock)
+            context: Context info for token logging (ignored in mock)
 
         Returns:
             Answer as string
@@ -609,7 +621,9 @@ You're making progress! Keep it up!"""
     async def analyze_document_structure(
         self,
         content: str,
-        max_sections: int = 15
+        max_sections: int = 15,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> DocumentOutline:
         """
         Analyze document content and detect natural sections.

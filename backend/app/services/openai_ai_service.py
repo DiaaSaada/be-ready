@@ -3,7 +3,7 @@ OpenAI AI Service
 Real implementation using OpenAI's GPT API.
 Implements BaseAIService interface.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import uuid
 from openai import AsyncOpenAI
@@ -16,6 +16,7 @@ from app.models.question import (
     TrueFalseQuestion,
     QuestionDifficulty,
 )
+from app.models.token_usage import OperationType
 from app.services.base_ai_service import BaseAIService
 from app.config import settings
 
@@ -51,7 +52,9 @@ class OpenAIService(BaseAIService):
         self,
         topic: str,
         config: CourseConfig,
-        content: str = ""
+        content: str = "",
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate chapters using OpenAI GPT.
@@ -60,6 +63,8 @@ class OpenAIService(BaseAIService):
             topic: The subject/topic for the course
             config: CourseConfig with chapter count, difficulty, depth, and time settings
             content: Optional document content to analyze
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects
@@ -191,6 +196,17 @@ Return ONLY valid JSON:
             response_format={"type": "json_object"}  # Force JSON response
         )
 
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.CHAPTER_GENERATION,
+                model=self.default_model,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context or topic
+            )
+
         # Parse response
         response_text = response.choices[0].message.content
 
@@ -269,7 +285,9 @@ Return ONLY valid JSON:
 
     async def generate_questions_from_config(
         self,
-        config: QuestionGenerationConfig
+        config: QuestionGenerationConfig,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> ChapterQuestions:
         """
         Generate quiz questions using full configuration.
@@ -278,6 +296,8 @@ Return ONLY valid JSON:
 
         Args:
             config: QuestionGenerationConfig with all generation parameters
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             ChapterQuestions object with generated questions
@@ -345,6 +365,17 @@ Return JSON with this structure:
             response_format={"type": "json_object"}
         )
 
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.QUESTION_GENERATION,
+                model=settings.model_question_generation,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context or config.topic
+            )
+
         # Parse response (already JSON due to response_format)
         response_text = response.choices[0].message.content
         data = json.loads(response_text)
@@ -388,17 +419,21 @@ Return JSON with this structure:
         )
     
     async def generate_feedback(
-        self, 
+        self,
         user_progress: Dict[str, Any],
-        weak_areas: List[str]
+        weak_areas: List[str],
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Generate personalized feedback using OpenAI GPT.
-        
+
         Args:
             user_progress: User's progress data
             weak_areas: Areas where student needs improvement
-            
+            user_id: User ID for token usage logging
+            context: Context info for token logging
+
         Returns:
             Feedback message as string
         """
@@ -415,7 +450,7 @@ Provide:
 4. Readiness assessment (ready/not ready for exam)
 
 Be supportive but honest. Keep it concise (3-4 paragraphs)."""
-        
+
         response = await self.client.chat.completions.create(
             model=settings.model_student_feedback,
             max_tokens=settings.max_tokens_feedback,
@@ -425,23 +460,38 @@ Be supportive but honest. Keep it concise (3-4 paragraphs)."""
                 {"role": "user", "content": prompt}
             ]
         )
-        
+
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.FEEDBACK_GENERATION,
+                model=settings.model_student_feedback,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context
+            )
+
         return response.choices[0].message.content
-    
+
     async def check_answer(
-        self, 
-        question: str, 
-        user_answer: str, 
-        correct_answer: str
+        self,
+        question: str,
+        user_answer: str,
+        correct_answer: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Check answer using OpenAI GPT.
-        
+
         Args:
             question: The question text
             user_answer: User's answer
             correct_answer: The correct answer
-            
+            user_id: User ID for token usage logging
+            context: Context info for token logging
+
         Returns:
             Dictionary with 'is_correct', 'explanation', 'score'
         """
@@ -462,7 +512,7 @@ Return ONLY valid JSON:
   "explanation": "...",
   "score": 0.0-1.0
 }}"""
-        
+
         response = await self.client.chat.completions.create(
             model=settings.model_answer_checking,
             max_tokens=settings.max_tokens_answer,
@@ -473,34 +523,49 @@ Return ONLY valid JSON:
             ],
             response_format={"type": "json_object"}
         )
-        
+
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.ANSWER_CHECK,
+                model=settings.model_answer_checking,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context
+            )
+
         response_text = response.choices[0].message.content
         return json.loads(response_text)
-    
+
     async def answer_question(
-        self, 
-        question: str, 
-        context: str
+        self,
+        question: str,
+        rag_context: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> str:
         """
         Answer student question using RAG context with OpenAI GPT.
-        
+
         Args:
             question: Student's question
-            context: Relevant context from the material
-            
+            rag_context: Relevant context from the material
+            user_id: User ID for token usage logging
+            context: Context info for token logging
+
         Returns:
             Answer as string
         """
         prompt = f"""You are a helpful tutor. Answer the student's question using the provided context.
 
 Context from the learning material:
-{context}
+{rag_context}
 
 Student's Question: {question}
 
 Provide a clear, concise answer based on the context. If the context doesn't contain enough information, say so."""
-        
+
         response = await self.client.chat.completions.create(
             model=settings.model_rag_query,
             max_tokens=settings.max_tokens_rag,
@@ -511,12 +576,25 @@ Provide a clear, concise answer based on the context. If the context doesn't con
             ]
         )
 
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.RAG_ANSWER,
+                model=settings.model_rag_query,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context
+            )
+
         return response.choices[0].message.content
 
     async def analyze_document_structure(
         self,
         content: str,
-        max_sections: int = 15
+        max_sections: int = 15,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> DocumentOutline:
         """
         Analyze document content and detect natural sections using OpenAI GPT.
@@ -524,10 +602,13 @@ Provide a clear, concise answer based on the context. If the context doesn't con
         Args:
             content: Full extracted document text
             max_sections: Maximum number of sections to detect
+            user_id: User ID for token usage logging
+            context: Context info (filenames) for token logging
 
         Returns:
             DocumentOutline with detected structure
         """
+        print(f"[OPENAI] analyze_document_structure called - user_id={user_id}, context={context}")
         # Truncate content if too long
         analysis_content = content[:50000]
 
@@ -589,6 +670,17 @@ Return valid JSON with this structure:
             response_format={"type": "json_object"}
         )
 
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.ANALYZE_DOCUMENT,
+                model=settings.model_document_analysis,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context
+            )
+
         response_text = response.choices[0].message.content
         data = json.loads(response_text)
 
@@ -618,7 +710,9 @@ Return valid JSON with this structure:
         topic: str,
         content: str,
         confirmed_sections: List[ConfirmedSection],
-        difficulty: str
+        difficulty: str,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate detailed chapters based on user-confirmed outline using OpenAI GPT.
@@ -629,6 +723,8 @@ Return valid JSON with this structure:
             content: Full extracted document text
             confirmed_sections: User-confirmed sections
             difficulty: Course difficulty level
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects with key_ideas populated
@@ -652,7 +748,9 @@ Return valid JSON with this structure:
                 content=analysis_content,
                 sections=batch_sections,
                 difficulty=difficulty,
-                start_number=batch_start + 1
+                start_number=batch_start + 1,
+                user_id=user_id,
+                context=context
             )
             all_chapters.extend(batch_chapters)
 
@@ -664,7 +762,9 @@ Return valid JSON with this structure:
         content: str,
         sections: List[ConfirmedSection],
         difficulty: str,
-        start_number: int
+        start_number: int,
+        user_id: Optional[str] = None,
+        context: Optional[str] = None
     ) -> List[Chapter]:
         """
         Generate a batch of chapters (max 5 at a time) to stay within token limits.
@@ -675,6 +775,8 @@ Return valid JSON with this structure:
             sections: Batch of sections to generate
             difficulty: Course difficulty level
             start_number: Starting chapter number for this batch
+            user_id: User ID for token usage logging
+            context: Context info (topic/filenames) for token logging
 
         Returns:
             List of Chapter objects for this batch
@@ -748,6 +850,17 @@ Return valid JSON:
             ],
             response_format={"type": "json_object"}
         )
+
+        # Log token usage
+        if response.usage:
+            await self.log_token_usage(
+                operation=OperationType.CHAPTER_GENERATION,
+                model=self.default_model,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                user_id=user_id,
+                context=context or topic
+            )
 
         response_text = response.choices[0].message.content
         data = json.loads(response_text)
