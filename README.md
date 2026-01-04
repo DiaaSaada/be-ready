@@ -140,6 +140,7 @@ curl http://localhost:8000/health
 
 ## Development Roadmap
 
+### Completed
 - [x] Project setup and configuration
 - [x] MongoDB integration
 - [x] Chapter generation with Claude/OpenAI
@@ -150,12 +151,28 @@ curl http://localhost:8000/health
 - [x] Course management (CRUD)
 - [x] Auto-enrollment on generation
 - [x] File upload processing (PDF, DOCX, TXT)
-- [ ] AI mentor feedback
-- [ ] RAG system for contextual help  (https://github.com/yichuan-w/LEANN)
-- [ ] Gemini AI provider
-- [ ] Chapter verification with secondary LLM
+- [x] Gemini AI provider
 - [x] Frontend integration
+- [x] Multi-file document analysis with source tracking
+
+### In Progress
+- [ ] AI mentor feedback
+- [ ] RAG system for contextual help (https://github.com/yichuan-w/LEANN)
+- [ ] Chapter verification with secondary LLM
 - [ ] Improve the topic title before generation
+
+### Future Features
+
+| Phase | Feature | Priority | Description |
+|-------|---------|----------|-------------|
+| 1 | Platform Token System | High | Purchase tokens (1$ = N tokens), balance display, top-up |
+| 1 | Token Usage & Logging | High | Track usage per user/operation/course, provider-specific rates |
+| 2 | Payment & Subscriptions | High | Stripe/PayPal integration, monthly/yearly plans |
+| 3 | Paid & Free Tier | High | AI generation for paid users, community courses for free |
+| 3 | Community Courses | Medium | Public course library, browse by topic, ratings |
+| 4 | Social Login | Medium | Google, Apple, LinkedIn OAuth |
+| 5 | Enhanced User Profile | Medium | Age, education level, goals for personalized content |
+| 6 | Human Mentor Accounts | Low | Generate/review courses, referral codes, student tracking |
 
 ## Environment Variables
 
