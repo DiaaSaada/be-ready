@@ -166,6 +166,12 @@ curl http://localhost:8000/health
 - [ ] Notifications ("Time to study!" reminders, quick tips to keep users engaged)
 - [ ] Human feedback (thumbs up/down to improve over time)
 - [ ] GitHub Actions (CI/CD pipeline)
+- [ ] Gamification
+- [ ] Community Courses gallery of already generated courses other subscribed users can use without paying for LLM tokens
+- [ ] Vote Up/Down course based on how good the quility and coverage of the quizes 
+- [ ] Bring your own LLM key
+ 
+
 
 ### Future Features
 
