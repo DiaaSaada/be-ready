@@ -199,6 +199,13 @@ async def generate_gap_quiz(
                 provider=provider or settings.default_ai_provider
             )
 
+            # Add extra questions to chapter question pools for future regular quizzes
+            await crud.add_gap_quiz_questions_to_chapters(
+                course_topic=analysis.course_topic,
+                difficulty=analysis.difficulty,
+                extra_questions=extra_questions
+            )
+
     # Build gap quiz
     gap_quiz = GapQuiz(
         id=str(uuid.uuid4()),

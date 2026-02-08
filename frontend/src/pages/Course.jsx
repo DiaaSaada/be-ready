@@ -5,7 +5,7 @@ import { courseAPI, progressAPI, questionAPI, mentorAPI } from '../services/api'
 import { useAuth } from '../contexts/AuthContext';
 
 function Course() {
-  const { courseId } = useParams();
+  const { courseSlug } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [course, setCourse] = useState(null);
@@ -19,7 +19,7 @@ function Course() {
     const fetchCourseAndProgress = async () => {
       try {
         setLoading(true);
-        const data = await courseAPI.getById(courseId);
+        const data = await courseAPI.getBySlug(courseSlug);
         setCourse(data);
 
         // Fetch progress and question counts for this course
@@ -73,7 +73,7 @@ function Course() {
     };
 
     fetchCourseAndProgress();
-  }, [courseId, user?.id]);
+  }, [courseSlug, user?.id]);
 
   // Loading state
   if (loading) {

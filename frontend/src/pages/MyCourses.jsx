@@ -29,7 +29,7 @@ function MyCourses() {
   };
 
   const handleCourseClick = (course) => {
-    navigate(`/app/course/${course.id}`);
+    navigate(`/app/course/${course.slug}`);
   };
 
   const handleDeleteCourse = async (course) => {

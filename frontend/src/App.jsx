@@ -41,7 +41,7 @@ function App() {
               <MyCourses />
             </ProtectedRoute>
           } />
-          <Route path="/app/course/:courseId" element={
+          <Route path="/app/course/:courseSlug" element={
             <ProtectedRoute>
               <Course />
             </ProtectedRoute>

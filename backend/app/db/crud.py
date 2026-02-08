@@ -1364,3 +1364,97 @@ async def invalidate_gap_quiz_cache(
     })
 
     return result.deleted_count
+
+
+# =============================================================================
+# Question Pool Enhancement
+# =============================================================================
+
+async def add_gap_quiz_questions_to_chapters(
+    course_topic: str,
+    difficulty: str,
+    extra_questions: List[Any]
+) -> int:
+    """
+    Add gap quiz extra questions to chapter question pools.
+    This allows AI-generated gap quiz questions to be reused in regular quizzes.
+
+    Args:
+        course_topic: Course topic
+        difficulty: Course difficulty
+        extra_questions: List of GapQuizQuestion objects
+
+    Returns:
+        Number of questions added
+    """
+    db = MongoDB.get_db()
+    if db is None:
+        return 0
+
+    if not extra_questions:
+        return 0
+
+    # Group questions by source_chapter
+    by_chapter: Dict[int, Dict[str, List[Dict]]] = {}
+    for q in extra_questions:
+        # Handle both GapQuizQuestion objects and dicts
+        if hasattr(q, 'source_chapter'):
+            ch = q.source_chapter
+            q_type = q.question_type
+            q_dict = {
+                "id": q.id,
+                "question_text": q.question_text,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+                "difficulty": q.difficulty,
+                "source": "gap_quiz",
+                "target_concept": q.target_concept
+            }
+            if q_type == "mcq":
+                q_dict["options"] = q.options
+        else:
+            ch = q.get("source_chapter")
+            q_type = q.get("question_type", "mcq")
+            q_dict = {
+                "id": q.get("id"),
+                "question_text": q.get("question_text"),
+                "correct_answer": q.get("correct_answer"),
+                "explanation": q.get("explanation"),
+                "difficulty": q.get("difficulty"),
+                "source": "gap_quiz",
+                "target_concept": q.get("target_concept")
+            }
+            if q_type == "mcq":
+                q_dict["options"] = q.get("options")
+
+        if ch not in by_chapter:
+            by_chapter[ch] = {"mcq": [], "true_false": []}
+
+        if q_type == "mcq":
+            by_chapter[ch]["mcq"].append(q_dict)
+        else:
+            by_chapter[ch]["true_false"].append(q_dict)
+
+    # Append to each chapter's question document
+    added = 0
+    normalized_topic = course_topic.lower().strip()
+
+    for chapter_num, questions in by_chapter.items():
+        update_ops = {}
+        if questions["mcq"]:
+            update_ops["mcq"] = {"$each": questions["mcq"]}
+        if questions["true_false"]:
+            update_ops["true_false"] = {"$each": questions["true_false"]}
+
+        if update_ops:
+            await db[QUESTIONS_COLLECTION].update_one(
+                {
+                    "course_topic": normalized_topic,
+                    "difficulty": difficulty,
+                    "chapter_number": chapter_num
+                },
+                {"$push": update_ops}
+            )
+            added += len(questions["mcq"]) + len(questions["true_false"])
+
+    return added

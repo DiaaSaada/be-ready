@@ -41,6 +41,12 @@ export const courseAPI = {
     return response.data;
   },
 
+  // Get a single course by slug
+  getBySlug: async (slug) => {
+    const response = await api.get(`/api/v1/courses/by-slug/${slug}`);
+    return response.data;
+  },
+
   // Delete a course
   deleteCourse: async (courseId) => {
     const response = await api.delete(`/api/v1/courses/${courseId}`);
