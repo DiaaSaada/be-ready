@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
+import { useLocation, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { questionAPI } from '../services/api';
 import Header from '../components/Header';
 
 function Quiz() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { courseSlug, chapterNumber } = useParams();
   const { topic, difficulty, chapter } = location.state || {};
 
   // Quiz state
@@ -104,12 +105,13 @@ function Quiz() {
       setShowFeedback(false);
     } else {
       // Quiz complete - navigate to results
-      navigate('/app/quiz/results', {
+      navigate(`/app/course/${courseSlug}/ch/${chapterNumber}/results`, {
         state: {
           topic,
           difficulty,
           chapter,
           questions,
+          courseSlug,
           answers: {
             ...answers,
             [currentIndex]: {

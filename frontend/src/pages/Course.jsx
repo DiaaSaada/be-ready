@@ -107,7 +107,8 @@ function Course() {
   }
 
   const handleStartQuiz = (chapter) => {
-    navigate('/app/quiz', {
+    const chapterNum = chapter.number || 1;
+    navigate(`/app/course/${course.slug}/ch/${chapterNum}/quiz`, {
       state: {
         topic: course.topic,
         difficulty: course.difficulty,

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link, Navigate } from 'react-router-dom';
+import { useLocation, Link, Navigate, useParams } from 'react-router-dom';
 import { progressAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/Header';
 
 function QuizResults() {
   const location = useLocation();
+  const { courseSlug, chapterNumber } = useParams();
   const { user } = useAuth();
   const { topic, difficulty, chapter, questions, answers } = location.state || {};
 
@@ -197,23 +198,23 @@ function QuizResults() {
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            to="/app/quiz"
+            to={`/app/course/${courseSlug}/ch/${chapterNumber}/quiz`}
             state={{ topic, difficulty, chapter }}
             className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-center"
           >
             Try Again
           </Link>
           <Link
-            to="/app/progress"
+            to={`/app/course/${courseSlug}`}
             className="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors text-center"
           >
-            My Progress
+            Back to Course
           </Link>
           <Link
-            to="/app"
+            to="/app/progress"
             className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors text-center"
           >
-            New Course
+            My Progress
           </Link>
         </div>
       </main>

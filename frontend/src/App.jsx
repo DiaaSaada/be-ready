@@ -46,12 +46,12 @@ function App() {
               <Course />
             </ProtectedRoute>
           } />
-          <Route path="/app/quiz" element={
+          <Route path="/app/course/:courseSlug/ch/:chapterNumber/quiz" element={
             <ProtectedRoute>
               <Quiz />
             </ProtectedRoute>
           } />
-          <Route path="/app/quiz/results" element={
+          <Route path="/app/course/:courseSlug/ch/:chapterNumber/results" element={
             <ProtectedRoute>
               <QuizResults />
             </ProtectedRoute>
