@@ -154,6 +154,7 @@ curl http://localhost:8000/health
 - [x] Gemini AI provider
 - [x] Frontend integration
 - [x] Multi-file document analysis with source tracking
+- [x] Language detection and multi-language content generation (Arabic, English, etc.)
 
 ### In Progress
 - [ ] AI mentor feedback
@@ -169,6 +170,7 @@ curl http://localhost:8000/health
 - [ ] Gamification
 - [ ] Community Courses gallery of already generated courses other subscribed users can use without paying for LLM tokens
 quizes 
+- [ ] Intereduce Grphics and ArtWorks
 - [ ] Bring your own LLM key
 - [ ] Invite studets to already generated course by a teacher and email the teacher when each student submit his final result
 
