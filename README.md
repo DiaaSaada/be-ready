@@ -188,6 +188,7 @@ quizes
 | 6 | Human Mentor Accounts | Low | Generate/review courses, referral codes, student tracking |
 | 7 | AI Flashcards | High | Auto-generate flashcards from course chapters for quick review |
 | 7 | Spaced Repetition | High | Smart review scheduling (SM-2 algorithm) to improve retention |
+| 7 | MindMap | High | improve grasping |
 | 8 | AI Tutor Chat | High | Chat interface to ask questions about course content (RAG-based) |
 | 8 | YouTube Video Support | High | Generate courses from YouTube video URLs via transcript extraction |
 | 9 | Study Schedule Generator | Medium | AI creates personalized study plan based on exam date and availability |
@@ -196,6 +197,8 @@ quizes
 | 10 | LMS Integration (Canvas) | Medium | Import courses/assignments from Canvas, Blackboard via API |
 | 11 | Chrome Extension | Low | Right-click any webpage to generate a course from its content |
 | 11 | Mobile App (PWA) | Low | Installable progressive web app with offline support |
+| 11 | Imprve animations and sho usefull qutes | Low | enhance XP |
+| 12 | Generate ArtWork images, infoGraphs and diagrams for each chapter | Low | enhance XP |
 
 ## Environment Variables
 
